@@ -16,6 +16,16 @@ npm run preview   # serve the production build locally
 No other setup needed — everything (fonts, icons) loads from the same
 CDNs the original prototype used.
 
+## Deploying to GitHub Pages
+
+Every push to `master` runs `.github/workflows/deploy-pages.yml`. The
+workflow installs dependencies, builds the app, and replaces the contents of
+the `dist` branch with the production files.
+
+In the repository's GitHub Pages settings, choose **Deploy from a branch** and
+select the `dist` branch and `/ (root)` folder. After that one-time setting,
+merging or pushing code to `master` automatically updates the site.
+
 ## How it's organised
 
 ```
