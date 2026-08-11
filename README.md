@@ -1,3 +1,13 @@
+**To DO**
+* hex outline to always be visible as an option/thicker
+* option to create different hex outline color compared to its parent interior color
+* options for all icons to live in one area and be used by anything that would need an icon.
+* clean up legend key to only have the unclaimed and impassable. Allowing the user to add the more players as needed and selecting the options
+* getting rid of the 40k icons as the main players home base icons. but insted allowing it to be w/e icon wanted
+* maps shapes square, hexagon, pentagon these are the only ones needed at this time
+ 
+
+
 # Cartograph-Pattern Tactical Grid (React)
 
 A React + Vite port of the hex-grid campaign map, restructured so the
