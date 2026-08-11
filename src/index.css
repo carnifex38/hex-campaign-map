@@ -170,3 +170,16 @@ select:focus, input[type=text]:focus { outline: none; border-color: var(--gold-d
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--steel-line); border-radius: 5px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--bronze); }
+
+/* Quest marker glow pulse (HexTile.jsx / HexMapCanvas.jsx). Only the
+   glow ring around the hex breathes — the "!" badge itself stays
+   static and dead-centre. It used to share this pulse via a CSS
+   scale() transform, but browsers compute an SVG <g>'s bounding-box
+   centre for transform-origin slightly differently from the hex's
+   true geometric centre, so the badge visibly drifted on every pulse
+   cycle instead of scaling in place. */
+@keyframes quest-glow-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+.quest-glow { animation: quest-glow-pulse 1.8s ease-in-out infinite; transform-origin: center; }

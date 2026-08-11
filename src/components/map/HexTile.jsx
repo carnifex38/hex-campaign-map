@@ -86,24 +86,42 @@ export default function HexTile({ c, r, hexSize, entry, isSelected, isDisconnect
         {c},{r}
       </text>
 
-      {factionDef && (
-        <g pointerEvents="none">
-          <clipPath id={clipId}>
-            <polygon points={hexPoints(x, y, hexSize * 0.92)} />
-          </clipPath>
-          <image
-            href={factionDef.url}
-            x={x - (hexSize * 1.3 * getFactionScale(entry.factionIcon)) / 2}
-            y={y - (hexSize * 1.3 * getFactionScale(entry.factionIcon)) / 2}
-            width={hexSize * 1.3 * getFactionScale(entry.factionIcon)}
-            height={hexSize * 1.3 * getFactionScale(entry.factionIcon)}
-            preserveAspectRatio="xMidYMid meet"
-            clipPath={`url(#${clipId})`}
-            opacity={state.factionIconOpacity}
-            style={{ filter: 'invert(1)' }}
-          />
-        </g>
-      )}
+      {factionDef && (() => {
+        // A smaller hex "medallion" behind the emblem, inset from the
+        // tile's own edge so a thin ring of the tile's territory colour
+        // reads as a border around it. This is what makes emblems with
+        // black/dark artwork stand out against a dark-filled tile — no
+        // colour inversion needed, so the emblem's real faction colours
+        // (legion reds, blues, etc.) render true to their actual art
+        // instead of getting flipped to their inverse.
+        const badgeScale = 0.76;
+        const badgeSize = hexSize * badgeScale;
+        const iconSize = hexSize * 1.3 * badgeScale * getFactionScale(entry.factionIcon);
+        return (
+          <g pointerEvents="none">
+            <polygon
+              points={hexPoints(x, y, badgeSize)}
+              fill="var(--bone)"
+              stroke="var(--bronze)"
+              strokeWidth={1.25}
+              opacity={state.factionIconOpacity}
+            />
+            <clipPath id={clipId}>
+              <polygon points={hexPoints(x, y, hexSize * 0.92 * badgeScale)} />
+            </clipPath>
+            <image
+              href={factionDef.url}
+              x={x - iconSize / 2}
+              y={y - iconSize / 2}
+              width={iconSize}
+              height={iconSize}
+              preserveAspectRatio="xMidYMid meet"
+              clipPath={`url(#${clipId})`}
+              opacity={state.factionIconOpacity}
+            />
+          </g>
+        );
+      })()}
 
       {rewardDef && (
         <svg
@@ -137,6 +155,32 @@ export default function HexTile({ c, r, hexSize, entry, isSelected, isDisconnect
           />
         );
       })}
+
+      {entry && entry.quest && entry.quest.status === 'active' && (() => {
+        // Unresolved quest marker's "!" badge, dead-centre in the hex,
+        // static (no pulse/scale animation on the badge itself — only
+        // the glow ring around the hex breathes; see index.css). The
+        // glow ring is drawn separately, in a final pass over the
+        // whole grid in HexMapCanvas — see the note there for why
+        // (same reason selection outlines moved there too: hexes
+        // painted after this one would otherwise cover part of it).
+        const quest = entry.quest;
+        const badgeR = hexSize * 0.24;
+        return (
+          <g pointerEvents="none">
+            <circle cx={x} cy={y} r={badgeR} fill="#14151a" stroke={quest.color} strokeWidth={1.5} />
+            <rect
+              x={x - badgeR * 0.16}
+              y={y - badgeR * 0.55}
+              width={badgeR * 0.32}
+              height={badgeR * 0.78}
+              rx={badgeR * 0.16}
+              fill={quest.color}
+            />
+            <circle cx={x} cy={y + badgeR * 0.46} r={badgeR * 0.17} fill={quest.color} />
+          </g>
+        );
+      })()}
     </g>
   );
 }

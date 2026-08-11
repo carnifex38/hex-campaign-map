@@ -1,22 +1,29 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useMapActions, useMapSelectors } from '../../state/MapContext.jsx';
 import { iconById } from '../../data/legionIcons.js';
 import { rewardIconById } from '../../data/rewardIcons.js';
 
-// One "commander tab" button + its dropdown detail card. Self-contained
-// open/close state and click-away handling, same pattern as
-// DropdownMenu.jsx, but the content here is a data readout rather than
-// a list of actions.
+// One "commander tab" button. Open/close state and click-away handling
+// live in the parent PlayerTabsBar (only one dropdown open at a time),
+// so this component just renders the button and, when told to, the
+// dropdown card itself.
+//
+// The dropdown is deliberately NOT positioned relative to this button —
+// see the `left: 16` below, which resolves against PlayerTabsBar's own
+// (relatively-positioned) container instead. That keeps every player's
+// card anchored to the same spot on the left (inset by 16px, the same
+// edge margin HexInfoPopup uses, so it isn't flush against the screen
+// edge) regardless of how far right their tab sits in the row, so
+// adding more players never pushes a card further out over the map.
 //
 // Cross-highlighting with the map: `selectedHexKey` comes from the
 // single currently-selected hex (see PlayerTabsBar). If it matches one
-// of this player's reward hexes, the tab glows, auto-opens, and the
-// matching row is highlighted. Clicking a reward row does the reverse —
-// it selects that hex, which highlights it on the map via HexTile's
-// existing selection outline and opens HexInfoPopup there.
-export default function PlayerTab({ player, selectedHexKey }) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef(null);
+// of this player's reward hexes, the tab glows, auto-opens (via
+// onRelevant), and the matching row is highlighted. Clicking a reward
+// row does the reverse — it selects that hex, which highlights it on
+// the map via HexTile's existing selection outline and opens
+// HexInfoPopup there.
+export default function PlayerTab({ player, selectedHexKey, isOpen, onToggle, onRelevant }) {
   const actions = useMapActions();
   const { rewardTypeById } = useMapSelectors();
 
@@ -24,39 +31,40 @@ export default function PlayerTab({ player, selectedHexKey }) {
     const s = new Set();
     player.bankedRewards.forEach((r) => s.add(r.hexKey));
     player.defendedRewards.forEach((r) => s.add(r.hexKey));
+    player.questAwards.forEach((r) => s.add(r.hexKey));
+    player.questPenalties.forEach((r) => s.add(r.hexKey));
     return s;
   }, [player]);
 
   const isRelevant = !!(selectedHexKey && rewardHexKeys.has(selectedHexKey));
 
   useEffect(() => {
-    if (isRelevant) setOpen(true);
+    if (isRelevant) onRelevant();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedHexKey]);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const onClickAway = (e) => {
-      if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onClickAway);
-    return () => document.removeEventListener('mousedown', onClickAway);
-  }, [open]);
 
   const swatchColor = player.factions[0] ? player.factions[0].color : '#7a1e1e';
   const armyEntries = Object.entries(player.armyCounts);
 
+  const lastSection = player.questPenalties.length > 0
+    ? 'penalties'
+    : player.questAwards.length > 0
+    ? 'awards'
+    : player.defendedRewards.length > 0
+    ? 'defending'
+    : 'banked';
+
   return (
-    <div ref={rootRef} style={{ position: 'relative' }}>
+    <div>
       <button
         className="btn-ghost"
-        onClick={() => setOpen((o) => !o)}
+        onClick={onToggle}
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: 7,
-          borderColor: open || isRelevant ? 'var(--gold-dim)' : undefined,
-          color: open || isRelevant ? 'var(--bone)' : undefined,
+          borderColor: isOpen || isRelevant ? 'var(--gold-dim)' : undefined,
+          color: isOpen || isRelevant ? 'var(--bone)' : undefined,
           boxShadow: isRelevant ? '0 0 0 1px var(--gold)' : undefined,
         }}
       >
@@ -71,16 +79,31 @@ export default function PlayerTab({ player, selectedHexKey }) {
           }}
         />
         {player.name}
+        {player.team && (
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 9,
+              color: 'var(--gold)',
+              border: '1px solid var(--gold-dim)',
+              borderRadius: 2,
+              padding: '1px 4px',
+              lineHeight: 1.4,
+            }}
+          >
+            T{player.team}
+          </span>
+        )}
         <span style={{ opacity: 0.6, fontSize: 9 }}>&#9662;</span>
       </button>
 
-      {open && (
+      {isOpen && (
         <div
           style={{
             position: 'absolute',
             top: '100%',
-            left: 0,
-            marginTop: 6,
+            left: 16,
+            marginTop: 16,
             width: 310,
             background: 'linear-gradient(180deg, var(--panel-raised), var(--panel))',
             border: '1px solid var(--steel-line)',
@@ -102,6 +125,12 @@ export default function PlayerTab({ player, selectedHexKey }) {
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--bone)' }}>{f.name}</span>
               </div>
             ))}
+          </Row>
+
+          <Row label="Team">
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: player.team ? 'var(--gold)' : 'var(--bone-dim)' }}>
+              {player.team ? `Team ${player.team}` : 'Unassigned'}
+            </span>
           </Row>
 
           <Row label="Points">
@@ -131,7 +160,7 @@ export default function PlayerTab({ player, selectedHexKey }) {
             })}
           </Row>
 
-          <Row label="Rewards Banked" last={player.defendedRewards.length === 0}>
+          <Row label="Rewards Banked" last={lastSection === 'banked'}>
             {player.bankedRewards.length === 0 && <Empty text="No rewards banked." />}
             {player.bankedRewards.map((item) => (
               <RewardRow
@@ -145,7 +174,7 @@ export default function PlayerTab({ player, selectedHexKey }) {
           </Row>
 
           {player.defendedRewards.length > 0 && (
-            <Row label="Defending (Not Yet Banked)" last>
+            <Row label="Defending (Not Yet Banked)" last={lastSection === 'defending'}>
               {player.defendedRewards.map((item) => (
                 <RewardRow
                   key={item.hexKey}
@@ -159,6 +188,36 @@ export default function PlayerTab({ player, selectedHexKey }) {
               <div className="hint-text" style={{ margin: '4px 0 0' }}>
                 Still under their own defence &mdash; must be captured by another player to be banked.
               </div>
+            </Row>
+          )}
+
+          {/* Quest awards — copied over automatically the moment the GM
+              marks a quest on one of this player's hexes Addressed. See
+              QuestPanel / HexInfoPopup for where those get written. */}
+          {player.questAwards.length > 0 && (
+            <Row label="Quest Awards" last={lastSection === 'awards'}>
+              {player.questAwards.map((item) => (
+                <QuestRow
+                  key={item.hexKey}
+                  item={item}
+                  highlighted={item.hexKey === selectedHexKey}
+                  onSelect={() => actions.selectHex(item.hexKey, false)}
+                />
+              ))}
+            </Row>
+          )}
+
+          {player.questPenalties.length > 0 && (
+            <Row label="Quest Penalties" last={lastSection === 'penalties'}>
+              {player.questPenalties.map((item) => (
+                <QuestRow
+                  key={item.hexKey}
+                  item={item}
+                  highlighted={item.hexKey === selectedHexKey}
+                  onSelect={() => actions.selectHex(item.hexKey, false)}
+                  dim
+                />
+              ))}
             </Row>
           )}
         </div>
@@ -209,6 +268,46 @@ function RewardRow({ item, rewardTypeById, highlighted, onSelect, dim }) {
             {item.benefit}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function QuestRow({ item, highlighted, onSelect, dim }) {
+  const [c, r] = item.hexKey.split(',');
+
+  return (
+    <div
+      onClick={onSelect}
+      title="Click to highlight this hex on the map"
+      style={{
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 6,
+        padding: '5px 6px',
+        marginBottom: 4,
+        borderRadius: 3,
+        cursor: 'pointer',
+        background: highlighted ? 'rgba(184,150,62,0.16)' : 'transparent',
+        border: highlighted ? '1px solid var(--gold)' : '1px solid transparent',
+      }}
+    >
+      <span
+        style={{
+          width: 10,
+          height: 10,
+          borderRadius: '50%',
+          background: item.color,
+          border: '1px solid rgba(0,0,0,0.4)',
+          flexShrink: 0,
+          marginTop: 2,
+        }}
+      />
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--gold-dim)' }}>@ {c},{r}</span>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: dim ? 'var(--bone-dim)' : 'var(--bone)', marginTop: 2, lineHeight: 1.4 }}>
+          {item.text}
+        </div>
       </div>
     </div>
   );

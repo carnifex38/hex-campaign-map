@@ -4,6 +4,7 @@ import ReadoutPanel from '../panels/ReadoutPanel.jsx';
 import ColorPanel from '../panels/ColorPanel.jsx';
 import IconPanel from '../panels/IconPanel.jsx';
 import RewardPanel from '../panels/RewardPanel.jsx';
+import QuestPanel from '../panels/QuestPanel.jsx';
 import MiniMap from '../map/MiniMap.jsx';
 
 // Add a new tab by: (1) adding it to TABS, (2) adding a case to the
@@ -13,6 +14,7 @@ const TABS = [
   { id: 'territory', label: 'Territory' },
   { id: 'icons', label: 'Icons' },
   { id: 'rewards', label: 'Rewards' },
+  { id: 'quests', label: 'Quests' },
   { id: 'overview', label: 'Overhead' },
 ];
 
@@ -37,6 +39,7 @@ export default function Sidebar() {
         {activeTab === 'territory' && <ColorPanel />}
         {activeTab === 'icons' && <IconPanel />}
         {activeTab === 'rewards' && <RewardPanel />}
+        {activeTab === 'quests' && <QuestPanel />}
         {activeTab === 'overview' && <div style={{ padding: 18 }}><MiniMap /></div>}
       </div>
     </div>

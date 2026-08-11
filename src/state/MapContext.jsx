@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useMemo, useReducer } from 'react';
-import { mapReducer, initialState, getOpacity, getFactionScale, rewardTypeById, paletteEntryForColor, paletteEntryForHex, resolveHexColor } from './mapReducer.js';
+import { mapReducer, initialState, getOpacity, getFactionScale, rewardTypeById, paletteEntryForColor, paletteEntryForHex, resolveHexColor, teamForOwner } from './mapReducer.js';
 import { shuffleArray } from '../utils/hexMath.js';
 import { findDisconnectedHexes } from '../utils/connectivity.js';
 
@@ -44,6 +44,7 @@ export function useMapActions() {
       clearSelection: () => dispatch({ type: 'CLEAR_SELECTION' }),
       updateHexMeta: (key, changes) => dispatch({ type: 'UPDATE_HEX_META', key, changes }),
       setObjectiveOwner: (owner) => dispatch({ type: 'SET_OBJECTIVE_OWNER', owner }),
+      setPlayerTeam: (owner, team) => dispatch({ type: 'SET_PLAYER_TEAM', owner, team: team || null }),
 
       applyColor: (color, paletteId) => dispatch({ type: 'APPLY_COLOR', color, paletteId: paletteId || null }),
       setColorOpacity: (color, opacity) => dispatch({ type: 'SET_COLOR_OPACITY', color, opacity }),
@@ -69,6 +70,13 @@ export function useMapActions() {
       placeReward: (rewardTypeId) => dispatch({ type: 'PLACE_REWARD', rewardTypeId }),
       clearRewards: () => dispatch({ type: 'CLEAR_REWARDS' }),
       resetAllRewards: () => dispatch({ type: 'RESET_ALL_REWARDS' }),
+
+      placeQuestMarker: (color) => dispatch({ type: 'PLACE_QUEST_MARKER', color }),
+      updateHexQuest: (key, changes) => dispatch({ type: 'UPDATE_HEX_QUEST', key, changes }),
+      clearQuestMarker: () => dispatch({ type: 'CLEAR_QUEST_MARKER' }),
+      resolveQuest: (key, outcome) => dispatch({ type: 'RESOLVE_QUEST', key, outcome }),
+      addCampaignEffect: (text) => dispatch({ type: 'ADD_CAMPAIGN_EFFECT', text }),
+      removeCampaignEffect: (id) => dispatch({ type: 'REMOVE_CAMPAIGN_EFFECT', id }),
 
       // Randomisation needs to read current selection + reward types to
       // build the shuffled pool, so it lives here rather than in the
@@ -112,6 +120,7 @@ export function useMapSelectors() {
       paletteEntryForColor: (color) => paletteEntryForColor(state, color),
       paletteEntryForHex: (entry) => paletteEntryForHex(state, entry),
       resolveHexColor: (entry) => resolveHexColor(state, entry),
+      teamForOwner: (owner) => teamForOwner(state, owner),
       isDisconnected: (key) => disconnected.has(key),
     };
   }, [state]);

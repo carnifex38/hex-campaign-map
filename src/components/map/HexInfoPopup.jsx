@@ -1,6 +1,19 @@
 import React from 'react';
 import { useMapState, useMapActions, useMapSelectors } from '../../state/MapContext.jsx';
 import { rewardIconById } from '../../data/rewardIcons.js';
+import { DEFAULT_QUEST_COLOR } from '../../state/mapReducer.js';
+
+const textAreaStyle = {
+  width: '100%',
+  resize: 'vertical',
+  background: '#0f1112',
+  border: '1px solid var(--steel-line)',
+  color: 'var(--bone)',
+  fontFamily: 'var(--font-mono)',
+  fontSize: 10.5,
+  padding: '6px 8px',
+  borderRadius: 2,
+};
 
 // Shown whenever exactly one hex is selected — a read/edit card for
 // that tile's mission-relevant info (points, objective, controller,
@@ -31,6 +44,18 @@ export default function HexInfoPopup() {
   const rewardIcon = rewardType ? rewardIconById(rewardType.iconId) : null;
 
   const setMeta = (changes) => actions.updateHexMeta(k, changes);
+
+  // Every known player, for the quest's "Assign To Player" override —
+  // same source ColorPanel's Teams section and RewardPanel use. This
+  // popup only ever mounts once a single hex is selected, so there's
+  // no early-return-before-a-hook concern; a plain computation (rather
+  // than useMemo) keeps it that way and avoids the palette array being
+  // small enough that memoising it buys nothing anyway.
+  const playerNameSet = new Set();
+  state.palette.forEach((p) => {
+    if (p.owner && p.owner.trim()) playerNameSet.add(p.owner.trim());
+  });
+  const playerNames = [...playerNameSet].sort();
 
   return (
     <div
@@ -204,20 +229,129 @@ export default function HexInfoPopup() {
               onChange={(e) => setMeta({ rewardBenefit: e.target.value })}
               placeholder="What does holding this reward grant?"
               rows={2}
-              style={{
-                width: '100%',
-                resize: 'vertical',
-                background: '#0f1112',
-                border: '1px solid var(--steel-line)',
-                color: 'var(--bone)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 10.5,
-                padding: '6px 8px',
-                borderRadius: 2,
-              }}
+              style={textAreaStyle}
             />
           </div>
         )}
+
+        {/* Quest marker — a GM-placed event hex. Pulses gold (or a
+            custom colour) on the map until resolved: Addressed banks
+            the award, Missed applies the penalty either to this
+            player alone or logged as a Campaign Effect map-wide. */}
+        <div className="field">
+          <label>Quest Marker</label>
+          {!entry.quest && (
+            <button className="btn-ghost" style={{ width: '100%' }} onClick={() => actions.placeQuestMarker(DEFAULT_QUEST_COLOR)}>
+              Place Exclamation Marker
+            </button>
+          )}
+
+          {entry.quest && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="color"
+                  value={entry.quest.color}
+                  onChange={(e) => actions.updateHexQuest(k, { color: e.target.value })}
+                  style={{ width: 28, height: 24, border: '1px solid var(--steel-line)', background: 'none', padding: 0, cursor: 'pointer', borderRadius: 3, flexShrink: 0 }}
+                />
+                <span
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 11.5,
+                    textTransform: 'uppercase',
+                    color:
+                      entry.quest.status === 'active'
+                        ? 'var(--gold)'
+                        : entry.quest.status === 'addressed'
+                        ? '#7fbf7f'
+                        : 'var(--blood-bright)',
+                  }}
+                >
+                  {entry.quest.status}
+                </span>
+              </div>
+
+              <div className="field" style={{ gap: 4 }}>
+                <label style={{ fontSize: 9 }}>Assign To Player</label>
+                <select
+                  value={entry.quest.targetPlayer || ''}
+                  onChange={(e) => actions.updateHexQuest(k, { targetPlayer: e.target.value || null })}
+                  style={{ width: '100%' }}
+                >
+                  <option value="">Auto (whoever controls this hex)</option>
+                  {playerNames.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+                {!entry.quest.targetPlayer && !controllerOwner && (
+                  <div className="hint-text" style={{ margin: 0, color: 'var(--blood-bright)' }}>
+                    This hex has no controller — pick a player above or the award/penalty won't reach anyone.
+                  </div>
+                )}
+              </div>
+
+              <div className="field" style={{ gap: 4 }}>
+                <label style={{ fontSize: 9 }}>Award (on Addressed)</label>
+                <textarea
+                  value={entry.quest.awardText}
+                  onChange={(e) => actions.updateHexQuest(k, { awardText: e.target.value })}
+                  placeholder="What does the player gain?"
+                  rows={2}
+                  style={textAreaStyle}
+                />
+              </div>
+
+              <div className="field" style={{ gap: 4 }}>
+                <label style={{ fontSize: 9 }}>Penalty (on Missed)</label>
+                <textarea
+                  value={entry.quest.penaltyText}
+                  onChange={(e) => actions.updateHexQuest(k, { penaltyText: e.target.value })}
+                  placeholder="What happens if it's ignored?"
+                  rows={2}
+                  style={textAreaStyle}
+                />
+              </div>
+
+              <div className="field" style={{ gap: 4 }}>
+                <label style={{ fontSize: 9 }}>Penalty Applies To</label>
+                <select
+                  value={entry.quest.penaltyScope}
+                  onChange={(e) => actions.updateHexQuest(k, { penaltyScope: e.target.value })}
+                  style={{ width: '100%' }}
+                >
+                  <option value="player">This player (the one assigned above)</option>
+                  <option value="campaign">Whole campaign</option>
+                </select>
+              </div>
+
+              {entry.quest.status === 'active' ? (
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    onClick={() => actions.resolveQuest(k, 'addressed')}
+                    style={{ flex: 1, background: 'transparent', border: '1px solid #7fbf7f', color: '#7fbf7f', fontFamily: 'var(--font-label)', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, padding: '6px 4px', borderRadius: 2, cursor: 'pointer' }}
+                  >
+                    Mark Addressed
+                  </button>
+                  <button
+                    onClick={() => actions.resolveQuest(k, 'missed')}
+                    style={{ flex: 1, background: 'transparent', border: '1px solid var(--blood-bright)', color: 'var(--blood-bright)', fontFamily: 'var(--font-label)', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, padding: '6px 4px', borderRadius: 2, cursor: 'pointer' }}
+                  >
+                    Mark Missed
+                  </button>
+                </div>
+              ) : (
+                <div className="hint-text" style={{ margin: 0 }}>
+                  Resolved as <b style={{ color: 'var(--bone)' }}>{entry.quest.status}</b>. Clear it to place a fresh marker here.
+                </div>
+              )}
+
+              <button className="btn-clear" style={{ marginTop: 0 }} onClick={() => actions.clearQuestMarker()}>
+                Remove Quest Marker
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

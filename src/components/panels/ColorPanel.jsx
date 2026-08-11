@@ -4,6 +4,7 @@ import { toHexColor } from '../../utils/hexMath.js';
 import { ALL_ICONS, iconKind } from '../../data/legionIcons.js';
 
 const HOME_ICON_OPTIONS = ALL_ICONS.filter((ic) => iconKind(ic) === 'faction');
+const TEAM_COUNT = 10;
 
 export default function ColorPanel() {
   const state = useMapState();
@@ -79,6 +80,80 @@ export default function ColorPanel() {
           + Add Legend Entry
         </button>
       </div>
+
+      <TeamsSection />
+    </div>
+  );
+}
+
+// Lets the GM (or a player) put an owner on a team (1-10) so their
+// territories link up into one shared supply network — a teammate can
+// cut through, or connect through, another teammate's colour and it
+// still reads as connected. Unassigned (no team) is the default and
+// keeps everyone's network to just their own colour(s), same as before.
+// Listed once per unique owner (not per palette entry) since a player
+// can hold more than one faction/colour.
+function TeamsSection() {
+  const state = useMapState();
+  const actions = useMapActions();
+
+  const owners = useMemo(() => {
+    const map = new Map(); // owner -> { name, factions: [...] }
+    state.palette.forEach((p) => {
+      const owner = (p.owner || '').trim();
+      if (!owner) return;
+      if (!map.has(owner)) map.set(owner, { name: owner, factions: [] });
+      map.get(owner).factions.push(p);
+    });
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [state.palette]);
+
+  return (
+    <div className="section">
+      <div className="panel-title">Teams</div>
+      <div className="hint-text" style={{ marginTop: -4 }}>
+        Put players on the same team (1-10) to ally their supply lines —
+        a teammate's territory can carry another teammate's connection
+        through, even in a different colour. No team assigned = unassigned;
+        leaving or switching teams re-checks connectivity immediately.
+      </div>
+
+      {owners.length === 0 && (
+        <div className="hint-text" style={{ margin: 0 }}>
+          Assign an Owner to a faction above first — players show up here
+          once they exist.
+        </div>
+      )}
+
+      {owners.map((o) => (
+        <div
+          key={o.name}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}
+        >
+          <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+            {o.factions.map((f) => (
+              <span
+                key={f.id}
+                title={f.name}
+                style={{ width: 10, height: 10, borderRadius: 2, background: f.color, border: '1px solid rgba(0,0,0,0.4)' }}
+              />
+            ))}
+          </div>
+          <span style={{ flex: 1, minWidth: 0, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--bone)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {o.name}
+          </span>
+          <select
+            value={state.teams[o.name] || ''}
+            onChange={(e) => actions.setPlayerTeam(o.name, Number(e.target.value) || null)}
+            style={{ width: 130, flexShrink: 0 }}
+          >
+            <option value="">Unassigned</option>
+            {Array.from({ length: TEAM_COUNT }, (_, i) => i + 1).map((n) => (
+              <option key={n} value={n}>Team {n}</option>
+            ))}
+          </select>
+        </div>
+      ))}
     </div>
   );
 }

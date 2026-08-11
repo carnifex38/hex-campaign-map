@@ -5,11 +5,14 @@ import { normalizeColor } from '../utils/hexMath.js';
 
 let paletteIdCounter = DEFAULT_PALETTE.length;
 let rewardTypeIdCounter = DEFAULT_REWARD_TYPES.length;
+let campaignEffectIdCounter = 0;
+
+export const DEFAULT_QUEST_COLOR = '#b8963e'; // matches --gold
 
 export const initialState = {
   cols: 12,
   rows: 8,
-  hexData: {}, // key -> { color, icons: [iconId,...], factionIcon, reward, meta }
+  hexData: {}, // key -> { color, icons: [iconId,...], factionIcon, reward, quest, meta }
   colorOpacity: {}, // normalised colour -> opacity (0-1), shared by every hex using it
   palette: DEFAULT_PALETTE,
   selected: {}, // key -> true, for O(1) toggle/lookup
@@ -18,6 +21,8 @@ export const initialState = {
   factionIconScale: {}, // iconId -> scale (1 = default), map-wide per faction
   activeFactionIcon: null, // which faction's scale slider is currently "aimed at"
   rewardTypes: DEFAULT_REWARD_TYPES,
+  teams: {}, // owner (player name) -> team number 1-10. No entry = unassigned.
+  campaignEffects: [], // [{ id, text }] — GM-managed campaign-wide modifiers, see QuestPanel.
 };
 
 // ---- small selectors, exported so components don't reach into state
@@ -74,10 +79,18 @@ export function resolveHexColor(state, entry) {
   return p ? p.color : entry.color || null;
 }
 
+// Team 1-10, or null for unassigned (the default — every owner is
+// their own unallied network). See utils/connectivity.js for how this
+// merges teammates' territories into one shared supply network.
+export function teamForOwner(state, owner) {
+  if (!owner) return null;
+  return state.teams[owner] || null;
+}
+
 function ensureEntry(hexData, k) {
   const existing = hexData[k];
   if (existing) return existing;
-  return { color: null, paletteId: null, icons: [], factionIcon: null, reward: null, meta: {} };
+  return { color: null, paletteId: null, icons: [], factionIcon: null, reward: null, quest: null, meta: {} };
 }
 
 function metaHasContent(meta) {
@@ -88,7 +101,7 @@ function metaHasContent(meta) {
 // A hex entry that has nothing set is dropped so hexData doesn't
 // accumulate empty placeholders as the user paints/clears.
 function isEmptyEntry(e) {
-  return !e.color && !e.paletteId && !e.factionIcon && !e.reward && (!e.icons || e.icons.length === 0) && !metaHasContent(e.meta);
+  return !e.color && !e.paletteId && !e.factionIcon && !e.reward && !e.quest && (!e.icons || e.icons.length === 0) && !metaHasContent(e.meta);
 }
 
 function pruneEntry(hexData, k) {
@@ -161,6 +174,16 @@ export function mapReducer(state, action) {
       return { ...state, hexData };
     }
 
+    // ---------------- Teams (players can ally up 1-10, or stay unassigned) ----------------
+    case 'SET_PLAYER_TEAM': {
+      const { owner, team } = action;
+      if (!owner) return state;
+      const teams = { ...state.teams };
+      if (team) teams[owner] = team;
+      else delete teams[owner];
+      return { ...state, teams };
+    }
+
     // ---------------- Colour / territory ----------------
     case 'APPLY_COLOR': {
       // paletteId is set when painting from a Legend Key swatch, so the
@@ -178,6 +201,7 @@ export function mapReducer(state, action) {
           icons: existing.icons || [],
           factionIcon: existing.factionIcon || null,
           reward: existing.reward || null,
+          quest: existing.quest || null,
           meta: existing.meta || {},
         };
       }
@@ -219,10 +243,27 @@ export function mapReducer(state, action) {
     }
     case 'UPDATE_PALETTE_ENTRY': {
       const { id, changes } = action;
-      return {
-        ...state,
-        palette: state.palette.map((p) => (p.id === id ? { ...p, ...changes } : p)),
-      };
+      const palette = state.palette.map((p) => (p.id === id ? { ...p, ...changes } : p));
+
+      // Renaming an owner should carry their team membership along with
+      // them, as long as no other palette entry is still using the old
+      // name (so we don't rip a team assignment out from under someone
+      // else who happens to share it) and the new name doesn't already
+      // have its own team assigned.
+      let teams = state.teams;
+      if (changes.owner !== undefined) {
+        const before = state.palette.find((p) => p.id === id);
+        const oldOwner = before ? (before.owner || '').trim() : '';
+        const newOwner = (changes.owner || '').trim();
+        const oldStillUsed = palette.some((p) => (p.owner || '').trim() === oldOwner);
+        if (oldOwner && newOwner && oldOwner !== newOwner && !oldStillUsed && teams[oldOwner] && !teams[newOwner]) {
+          teams = { ...teams };
+          teams[newOwner] = teams[oldOwner];
+          delete teams[oldOwner];
+        }
+      }
+
+      return { ...state, palette, teams };
     }
     case 'REMOVE_PALETTE_ENTRY':
       return { ...state, palette: state.palette.filter((p) => p.id !== action.id) };
@@ -356,6 +397,99 @@ export function mapReducer(state, action) {
       }
       return { ...state, hexData };
     }
+
+    // ---------------- Quest markers (exclamation-point event hexes) ----------------
+    // A quest marker is its own thing, separate from the Reward system:
+    // it's a live "!" glow+pulse on the map until the GM resolves it as
+    // Addressed (the player gets the award) or Missed (the penalty
+    // applies — to just that player, or logged as a Campaign Effect).
+    case 'PLACE_QUEST_MARKER': {
+      const { color } = action;
+      const hexData = { ...state.hexData };
+      for (const k of Object.keys(state.selected)) {
+        const entry = ensureEntry(hexData, k);
+        hexData[k] = {
+          ...entry,
+          quest: {
+            color: color || DEFAULT_QUEST_COLOR,
+            status: 'active',
+            awardText: '',
+            penaltyText: '',
+            penaltyScope: 'player',
+            // Who "This player" refers to for the award/penalty. Left
+            // null it falls back to whoever currently controls the
+            // hex's colour — set it explicitly so a quest on an
+            // unclaimed/neutral hex (or one meant for someone other
+            // than the current colour owner) still resolves to someone.
+            targetPlayer: null,
+          },
+        };
+      }
+      return { ...state, hexData };
+    }
+
+    case 'UPDATE_HEX_QUEST': {
+      const { key: k, changes } = action;
+      const entry = state.hexData[k];
+      if (!entry || !entry.quest) return state;
+      const hexData = { ...state.hexData, [k]: { ...entry, quest: { ...entry.quest, ...changes } } };
+      return { ...state, hexData };
+    }
+
+    case 'CLEAR_QUEST_MARKER': {
+      let hexData = { ...state.hexData };
+      for (const k of Object.keys(state.selected)) {
+        if (hexData[k]) hexData[k] = { ...hexData[k], quest: null };
+        hexData = pruneEntry(hexData, k);
+      }
+      return { ...state, hexData };
+    }
+
+    case 'RESOLVE_QUEST': {
+      // outcome: 'addressed' (award) or 'missed' (penalty). A missed
+      // quest scoped to the whole campaign auto-logs a Campaign Effect
+      // from the GM's penalty text, so it's visible to everyone even
+      // though it isn't tied to one player's hex.
+      const { key: k, outcome } = action;
+      const entry = state.hexData[k];
+      if (!entry || !entry.quest) return state;
+
+      // Lock in who this resolves to, right now, so the outcome stays
+      // with the player who actually addressed (or missed) it — a
+      // later capture of the hex must never silently hand the
+      // award/penalty to whoever holds it after the fact. If the GM
+      // never set an explicit "Assign To Player", freeze it to
+      // whoever currently controls the hex; if nobody does, it stays
+      // unassigned (same as before — see the warning in HexInfoPopup).
+      let targetPlayer = entry.quest.targetPlayer;
+      if (!targetPlayer) {
+        const controller = paletteEntryForHex(state, entry);
+        targetPlayer = controller && controller.owner ? controller.owner : null;
+      }
+
+      const quest = { ...entry.quest, status: outcome, targetPlayer };
+      const hexData = { ...state.hexData, [k]: { ...entry, quest } };
+
+      let campaignEffects = state.campaignEffects;
+      if (outcome === 'missed' && quest.penaltyScope === 'campaign') {
+        campaignEffectIdCounter += 1;
+        const text = quest.penaltyText.trim() || `A quest at ${k} went unaddressed.`;
+        campaignEffects = [...campaignEffects, { id: 'ce' + campaignEffectIdCounter, text }];
+      }
+
+      return { ...state, hexData, campaignEffects };
+    }
+
+    // ---------------- Campaign effects (GM-managed, map-wide) ----------------
+    case 'ADD_CAMPAIGN_EFFECT': {
+      const text = (action.text || '').trim();
+      if (!text) return state;
+      campaignEffectIdCounter += 1;
+      return { ...state, campaignEffects: [...state.campaignEffects, { id: 'ce' + campaignEffectIdCounter, text }] };
+    }
+
+    case 'REMOVE_CAMPAIGN_EFFECT':
+      return { ...state, campaignEffects: state.campaignEffects.filter((e) => e.id !== action.id) };
 
     default:
       return state;
