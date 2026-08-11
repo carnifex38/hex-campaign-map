@@ -85,6 +85,13 @@ export default function HexMapCanvas() {
   };
 
   const handleCanvasMouseDown = (e) => {
+    // The Hex Info Popup's inputs/textareas/selects live inside this
+    // same wrapper, so their mousedown events bubble up here too —
+    // bail out before preventDefault() below, which would otherwise
+    // block the browser's default focus/open behaviour for them
+    // (silently breaking typing and dropdowns).
+    if (['INPUT', 'TEXTAREA', 'SELECT', 'OPTION', 'BUTTON'].includes(e.target.tagName)) return;
+
     // Without this, dragging across the grid triggers the browser's
     // native text-selection instead (it highlights every hex's
     // coordinate label along the drag path) since those are real SVG
