@@ -358,7 +358,7 @@ export function mapReducer(state, action) {
     // ---------------- Reward system ----------------
     case 'ADD_REWARD_TYPE': {
       rewardTypeIdCounter += 1;
-      const rt = { id: 'rt' + rewardTypeIdCounter, name: 'New Reward', iconId: action.iconId, frequency: 1, enabled: true };
+      const rt = { id: 'rt' + rewardTypeIdCounter, name: 'New Reward', iconId: action.iconId, frequency: 1, enabled: true, benefit: '' };
       return { ...state, rewardTypes: [...state.rewardTypes, rt] };
     }
     case 'UPDATE_REWARD_TYPE': {
@@ -373,9 +373,19 @@ export function mapReducer(state, action) {
 
     case 'PLACE_REWARD': {
       const { rewardTypeId } = action;
+      // The reward type's own "Benefit / Bonus" text (set once in the
+      // Reward System panel) seeds each hex's Benefit field so the GM
+      // doesn't have to retype the same grant on every tile it's
+      // placed on — a hex that already carries its own custom text
+      // (from a previous edit) keeps that instead of being overwritten.
+      const rt = state.rewardTypes.find((r) => r.id === rewardTypeId);
       const hexData = { ...state.hexData };
       for (const k of Object.keys(state.selected)) {
-        hexData[k] = { ...ensureEntry(hexData, k), reward: rewardTypeId };
+        const existing = ensureEntry(hexData, k);
+        const meta = existing.meta || {};
+        const nextMeta =
+          rt && rt.benefit && !meta.rewardBenefit ? { ...meta, rewardBenefit: rt.benefit } : meta;
+        hexData[k] = { ...existing, reward: rewardTypeId, meta: nextMeta };
       }
       return { ...state, hexData };
     }
@@ -405,7 +415,13 @@ export function mapReducer(state, action) {
       const count = Math.min(eligibleKeys.length, bag.length);
       for (let i = 0; i < count; i++) {
         const k = eligibleKeys[i];
-        hexData[k] = { ...ensureEntry(hexData, k), reward: bag[i] };
+        const rewardTypeId = bag[i];
+        const rt = state.rewardTypes.find((r) => r.id === rewardTypeId);
+        const existing = ensureEntry(hexData, k);
+        const meta = existing.meta || {};
+        const nextMeta =
+          rt && rt.benefit && !meta.rewardBenefit ? { ...meta, rewardBenefit: rt.benefit } : meta;
+        hexData[k] = { ...existing, reward: rewardTypeId, meta: nextMeta };
       }
       return { ...state, hexData };
     }

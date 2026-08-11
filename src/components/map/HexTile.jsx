@@ -141,12 +141,13 @@ export default function HexTile({ c, r, hexSize, entry, isSelected, isDisconnect
             />
           )}
           <svg
+            className={rewardCaptured ? 'reward-capture-pulse' : undefined}
             x={x - (hexSize * 0.62) / 2}
             y={y - (hexSize * 0.62) / 2}
             width={hexSize * 0.62}
             height={hexSize * 0.62}
             viewBox="0 0 512 512"
-            opacity={rewardOpacity}
+            opacity={rewardCaptured ? undefined : rewardOpacity}
             style={{ filter: 'drop-shadow(0 0 1.5px rgba(0,0,0,0.95)) drop-shadow(0 0 3px rgba(0,0,0,0.75))' }}
             dangerouslySetInnerHTML={{ __html: rewardDef.markup }}
           />

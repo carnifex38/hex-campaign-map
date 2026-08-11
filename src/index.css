@@ -183,3 +183,12 @@ select:focus, input[type=text]:focus { outline: none; border-color: var(--gold-d
   50% { opacity: 1; }
 }
 .quest-glow { animation: quest-glow-pulse 1.8s ease-in-out infinite; transform-origin: center; }
+
+/* Captured-reward opacity pulse (HexTile.jsx) — marks a reward as
+   freshly taken from its original defender without needing a glow
+   filter (which read as too subtle against the tile's own colour). */
+@keyframes reward-capture-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+.reward-capture-pulse { animation: reward-capture-pulse 1.8s ease-in-out infinite; }

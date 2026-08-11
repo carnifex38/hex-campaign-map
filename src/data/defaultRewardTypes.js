@@ -1,7 +1,7 @@
 let counter = 0;
 function rewardType(name, iconId, frequency) {
   counter += 1;
-  return { id: 'rt' + counter, name, iconId, frequency, enabled: true };
+  return { id: 'rt' + counter, name, iconId, frequency, enabled: true, benefit: '' };
 }
 
 export const DEFAULT_REWARD_TYPES = [

@@ -44,7 +44,8 @@ export default function RewardPanel() {
       <div className="panel-title">Reward System</div>
       <div className="hint-text">
         Each reward's checkbox controls whether it's included when you randomise. Select hex(es), then click a
-        reward's "Place on Selected" button to stamp it manually. Only one reward per hex.
+        reward's "Place on Selected" button to stamp it manually. Only one reward per hex. Write a reward's benefit
+        once below its name — it'll pre-fill the Benefit / Bonus field on every hex you place it on afterward.
       </div>
 
       {state.rewardTypes.map((rt) => (
@@ -193,6 +194,25 @@ function RewardTypeCard({ rt }) {
           Place on Selected
         </button>
       </div>
+
+      <textarea
+        value={rt.benefit || ''}
+        onChange={(e) => actions.updateRewardType(rt.id, { benefit: e.target.value })}
+        placeholder="What does holding this reward grant? Pre-fills new placements' Benefit / Bonus field."
+        rows={2}
+        style={{
+          width: '100%',
+          resize: 'vertical',
+          marginTop: 6,
+          background: '#17191b',
+          border: '1px solid var(--steel-line)',
+          color: 'var(--bone)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          padding: '6px 8px',
+          borderRadius: 2,
+        }}
+      />
     </div>
   );
 }
