@@ -84,6 +84,21 @@ export default function RewardPanel() {
         )}
       </div>
 
+      <div className="section">
+        <div className="panel-title">Display</div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={state.showCapturedRewardOutlines}
+            onChange={(e) => actions.setShowCapturedRewardOutlines(e.target.checked)}
+            style={{ flexShrink: 0, accentColor: 'var(--gold)', width: 15, height: 15, cursor: 'pointer' }}
+          />
+          <span className="hint-text" style={{ margin: 0 }}>
+            Show the defender-coloured outline on captured rewards
+          </span>
+        </label>
+      </div>
+
       <button
         style={{ marginTop: 4, width: '100%', background: 'transparent', border: '1px dashed var(--steel-line)', color: 'var(--gold-dim)', padding: 7, fontSize: 11 }}
         onClick={() => actions.addRewardType(REWARD_ICONS[0].id)}

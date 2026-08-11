@@ -7,7 +7,7 @@ const MAX_SCALE = 4;
 // Spread `handlers` onto the scrollable container; apply `scale`/`offset`
 // as a CSS transform on the element you want to zoom/pan (see
 // components/map/HexMapCanvas.jsx for the reference usage).
-export function useZoomPan() {
+export function useZoomPan({ disabled } = {}) {
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const containerRef = useRef(null);
@@ -45,10 +45,14 @@ export function useZoomPan() {
     (e) => {
       // Only pan on the background / primary button, so hex clicks
       // still register normally (they stopPropagation if needed).
+      // Disabled while a movement-line tool is active — dragging there
+      // draws/erases an arrow instead, and shouldn't also drag the map
+      // out from under it. See HexMapCanvas.jsx.
+      if (disabled) return;
       if (e.button !== 0) return;
       dragState.current = { startX: e.clientX, startY: e.clientY, startOffset: offset };
     },
-    [offset]
+    [offset, disabled]
   );
 
   const onMouseMove = useCallback((e) => {

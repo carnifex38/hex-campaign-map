@@ -35,6 +35,30 @@ export function hexToPixel(c, r, hexSize) {
   return { x, y };
 }
 
+// Inverse of hexToPixel: which (existing) hex is closest to a given
+// point, for snapping a mouse release to a hex — e.g. finishing a
+// dragged movement arrow. Just a nearest-centre search rather than
+// real point-in-hexagon math; the grid's hexes are spaced far enough
+// apart relative to their size that "nearest centre" and "which hex
+// contains this point" agree for every point that's actually within
+// some hex, and the maxDist cutoff rejects points that are in neither
+// (e.g. a release out past the edge of the grid).
+export function pixelToHex(x, y, cols, rows, hexSize) {
+  let bestKey = null;
+  let bestDist = Infinity;
+  for (let c = 0; c < cols; c++) {
+    for (let r = 0; r < rows; r++) {
+      const p = hexToPixel(c, r, hexSize);
+      const dist = Math.hypot(p.x - x, p.y - y);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestKey = `${c},${r}`;
+      }
+    }
+  }
+  return bestDist <= hexSize * 1.05 ? bestKey : null;
+}
+
 export function gridPixelSize(cols, rows, hexSize) {
   const w = hexSize * 2;
   const h = Math.sqrt(3) * hexSize;
@@ -92,6 +116,39 @@ export function hexNeighbors(c, r) {
 export function toHexColor(c) {
   if (c && c.startsWith('#') && c.length === 7) return c;
   return '#202325';
+}
+
+// Geometry for a "war room" movement arrow between two hex centres —
+// pulled back from both centres so it doesn't run through whatever's
+// sitting there (faction medallions, reward icons, quest badges), with
+// a triangular arrowhead sized off the hex so it scales with the grid.
+// Used by HexMapCanvas for the movement-line overlay.
+export function arrowGeometry(fromPt, toPt, hexSize) {
+  const dx = toPt.x - fromPt.x;
+  const dy = toPt.y - fromPt.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  const ux = dx / dist;
+  const uy = dy / dist;
+
+  const startPad = hexSize * 0.4;
+  const endPad = hexSize * 0.55;
+  const headLen = Math.min(hexSize * 0.36, dist * 0.3);
+  const headWidth = hexSize * 0.22;
+
+  const start = { x: fromPt.x + ux * startPad, y: fromPt.y + uy * startPad };
+  const tip = { x: toPt.x - ux * endPad, y: toPt.y - uy * endPad };
+  const shaftEnd = { x: tip.x - ux * headLen, y: tip.y - uy * headLen };
+  const perpX = -uy;
+  const perpY = ux;
+  const left = { x: shaftEnd.x + perpX * headWidth, y: shaftEnd.y + perpY * headWidth };
+  const right = { x: shaftEnd.x - perpX * headWidth, y: shaftEnd.y - perpY * headWidth };
+
+  return {
+    shaft: `${start.x},${start.y} ${shaftEnd.x},${shaftEnd.y}`,
+    head: `${tip.x},${tip.y} ${left.x},${left.y} ${right.x},${right.y}`,
+    start,
+    tip,
+  };
 }
 
 // Fisher-Yates. Used by reward randomisation to shuffle both the

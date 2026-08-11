@@ -62,6 +62,7 @@ export function useMapActions() {
       clearFactionIcon: () => dispatch({ type: 'CLEAR_FACTION_ICON' }),
       resetAllIcons: () => dispatch({ type: 'RESET_ALL_ICONS' }),
       setFactionOpacity: (opacity) => dispatch({ type: 'SET_FACTION_OPACITY', opacity }),
+      setShowCapturedRewardOutlines: (show) => dispatch({ type: 'SET_SHOW_CAPTURED_REWARD_OUTLINES', show }),
       setFactionScale: (iconId, scale) => dispatch({ type: 'SET_FACTION_SCALE', iconId, scale }),
 
       addRewardType: (iconId) => dispatch({ type: 'ADD_REWARD_TYPE', iconId }),
@@ -77,6 +78,14 @@ export function useMapActions() {
       resolveQuest: (key, outcome) => dispatch({ type: 'RESOLVE_QUEST', key, outcome }),
       addCampaignEffect: (text) => dispatch({ type: 'ADD_CAMPAIGN_EFFECT', text }),
       removeCampaignEffect: (id) => dispatch({ type: 'REMOVE_CAMPAIGN_EFFECT', id }),
+
+      setMovementMode: (mode) => dispatch({ type: 'SET_MOVEMENT_MODE', mode }),
+      movementHexClick: (key) => dispatch({ type: 'MOVEMENT_HEX_CLICK', key }),
+      createMovementLine: (fromKey, toKey) => dispatch({ type: 'CREATE_MOVEMENT_LINE', fromKey, toKey }),
+      removeMovementLine: (id) => dispatch({ type: 'REMOVE_MOVEMENT_LINE', id }),
+      initializeMovement: () => dispatch({ type: 'INITIALIZE_MOVEMENT' }),
+      resolveSectorContest: (hexKey, colorNorm) => dispatch({ type: 'RESOLVE_SECTOR_CONTEST', hexKey, colorNorm }),
+      skipSectorContest: (hexKey) => dispatch({ type: 'SKIP_SECTOR_CONTEST', hexKey }),
 
       // Randomisation needs to read current selection + reward types to
       // build the shuffled pool, so it lives here rather than in the

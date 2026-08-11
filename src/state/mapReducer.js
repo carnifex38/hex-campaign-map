@@ -6,8 +6,10 @@ import { normalizeColor } from '../utils/hexMath.js';
 let paletteIdCounter = DEFAULT_PALETTE.length;
 let rewardTypeIdCounter = DEFAULT_REWARD_TYPES.length;
 let campaignEffectIdCounter = 0;
+let movementLineIdCounter = 0;
 
 export const DEFAULT_QUEST_COLOR = '#b8963e'; // matches --gold
+export const MOVEMENT_LINE_COLOR = '#d6392f'; // the "war room" red
 
 export const initialState = {
   cols: 12,
@@ -19,10 +21,17 @@ export const initialState = {
   activeColor: '#7a1e1e', // which colour the opacity slider controls
   factionIconOpacity: 0.9, // applies to every placed faction emblem, map-wide
   factionIconScale: {}, // iconId -> scale (1 = default), map-wide per faction
+  showCapturedRewardOutlines: true, // toggle for the "taken from" defender-colour ring, see RewardPanel
   activeFactionIcon: null, // which faction's scale slider is currently "aimed at"
   rewardTypes: DEFAULT_REWARD_TYPES,
   teams: {}, // owner (player name) -> team number 1-10. No entry = unassigned.
   campaignEffects: [], // [{ id, text }] — GM-managed campaign-wide modifiers, see QuestPanel.
+  movementLines: [], // [{ id, fromKey, toKey }] — see MovementControls.jsx
+  movementMode: 'none', // 'none' | 'draw' | 'erase'
+  // Hexes multiple factions' arrows are pointing at simultaneously,
+  // waiting on the GM to pick a winner — see INITIALIZE_MOVEMENT and
+  // SectorContestModal.jsx. [{ hexKey, contenders: [{ color, paletteId, lineIds }] }]
+  pendingContests: [],
 };
 
 // ---- small selectors, exported so components don't reach into state
@@ -337,6 +346,9 @@ export function mapReducer(state, action) {
     case 'SET_FACTION_OPACITY':
       return { ...state, factionIconOpacity: action.opacity };
 
+    case 'SET_SHOW_CAPTURED_REWARD_OUTLINES':
+      return { ...state, showCapturedRewardOutlines: action.show };
+
     case 'SET_FACTION_SCALE':
       return {
         ...state,
@@ -490,6 +502,113 @@ export function mapReducer(state, action) {
 
     case 'REMOVE_CAMPAIGN_EFFECT':
       return { ...state, campaignEffects: state.campaignEffects.filter((e) => e.id !== action.id) };
+
+    // ---------------- Movement lines (war-room arrows between hexes) ----------------
+    // Toggling a mode on while the other is active switches straight
+    // over; clicking the same mode's button again turns it off. Either
+    // way any half-drawn arrow (a picked start hex with no destination
+    // yet) is abandoned — see MovementControls.jsx.
+    case 'SET_MOVEMENT_MODE': {
+      const mode = action.mode === state.movementMode ? 'none' : action.mode;
+      return { ...state, movementMode: mode };
+    }
+
+    // Erase-mode hex click: drop any line touching this hex. (Drawing
+    // is a drag gesture now, handled client-side in HexMapCanvas and
+    // committed in one shot via CREATE_MOVEMENT_LINE below — see the
+    // comment there for why.)
+    case 'MOVEMENT_HEX_CLICK': {
+      const { key: k } = action;
+      if (state.movementMode !== 'erase') return state;
+      const movementLines = state.movementLines.filter((l) => l.fromKey !== k && l.toKey !== k);
+      return { ...state, movementLines };
+    }
+
+    // Fires once, on mouseup, at the end of a drag-to-draw gesture —
+    // both endpoints are already known (the drag itself picked and
+    // snapped them), so unlike the old click-click flow this doesn't
+    // need any "pending start" state in between.
+    case 'CREATE_MOVEMENT_LINE': {
+      const { fromKey, toKey } = action;
+      if (!fromKey || !toKey || fromKey === toKey) return state;
+      // The arrow has to start from a hex that's actually claimed —
+      // "a controlling sector" — so dragging off an empty/unclaimed
+      // hex produces nothing.
+      const color = resolveHexColor(state, state.hexData[fromKey]);
+      if (!color) return state;
+      const alreadyExists = state.movementLines.some((l) => l.fromKey === fromKey && l.toKey === toKey);
+      if (alreadyExists) return state;
+      movementLineIdCounter += 1;
+      const movementLines = [...state.movementLines, { id: 'mv' + movementLineIdCounter, fromKey, toKey }];
+      return { ...state, movementLines };
+    }
+
+    case 'REMOVE_MOVEMENT_LINE':
+      return { ...state, movementLines: state.movementLines.filter((l) => l.id !== action.id) };
+
+    // "Claim Sector" — resolves every drawn arrow at once. A hex with
+    // arrows from only one faction is claimed immediately (repainted
+    // to that faction's colour, arrows consumed). A hex with arrows
+    // from more than one distinct faction colour is left untouched and
+    // queued as a contest for the GM to settle in SectorContestModal —
+    // arrows into that hex are the reference for it, so nothing about
+    // it is graded as "won" until RESOLVE_SECTOR_CONTEST fires.
+    case 'INITIALIZE_MOVEMENT': {
+      const byDest = new Map(); // toKey -> Map(colourNorm -> { color, paletteId, lineIds })
+      for (const line of state.movementLines) {
+        const fromEntry = state.hexData[line.fromKey];
+        const color = resolveHexColor(state, fromEntry);
+        if (!color) continue; // shouldn't happen — draw requires a controlled start
+        const norm = normalizeColor(color);
+        if (!byDest.has(line.toKey)) byDest.set(line.toKey, new Map());
+        const group = byDest.get(line.toKey);
+        if (!group.has(norm)) group.set(norm, { color, paletteId: fromEntry.paletteId || null, lineIds: [] });
+        group.get(norm).lineIds.push(line.id);
+      }
+
+      let hexData = { ...state.hexData };
+      let movementLines = state.movementLines;
+      const pendingContests = [...state.pendingContests];
+
+      for (const [toKey, group] of byDest.entries()) {
+        const contenders = [...group.values()];
+        if (contenders.length === 1) {
+          const winner = contenders[0];
+          const existing = ensureEntry(hexData, toKey);
+          hexData[toKey] = { ...existing, color: winner.color, paletteId: winner.paletteId };
+          const spentIds = winner.lineIds;
+          movementLines = movementLines.filter((l) => !spentIds.includes(l.id));
+        } else if (!pendingContests.some((c) => c.hexKey === toKey)) {
+          pendingContests.push({ hexKey: toKey, contenders });
+        }
+      }
+
+      return { ...state, hexData, movementLines, pendingContests };
+    }
+
+    case 'RESOLVE_SECTOR_CONTEST': {
+      const { hexKey, colorNorm } = action;
+      const contest = state.pendingContests.find((c) => c.hexKey === hexKey);
+      if (!contest) return state;
+      const winner = contest.contenders.find((c) => normalizeColor(c.color) === colorNorm);
+      if (!winner) return state;
+
+      const hexData = { ...state.hexData };
+      const existing = ensureEntry(hexData, hexKey);
+      hexData[hexKey] = { ...existing, color: winner.color, paletteId: winner.paletteId };
+
+      const spentIds = contest.contenders.flatMap((c) => c.lineIds);
+      const movementLines = state.movementLines.filter((l) => !spentIds.includes(l.id));
+      const pendingContests = state.pendingContests.filter((c) => c.hexKey !== hexKey);
+
+      return { ...state, hexData, movementLines, pendingContests };
+    }
+
+    // Leaves the hex and its arrows untouched, just takes it off the
+    // GM's queue for now — clicking Claim Sector again later will put
+    // it right back if those arrows are still there.
+    case 'SKIP_SECTOR_CONTEST':
+      return { ...state, pendingContests: state.pendingContests.filter((c) => c.hexKey !== action.hexKey) };
 
     default:
       return state;

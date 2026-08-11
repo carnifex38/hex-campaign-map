@@ -6,7 +6,7 @@ import { useMapState, useMapSelectors } from '../../state/MapContext.jsx';
 
 export default function HexTile({ c, r, hexSize, entry, isSelected, isDisconnected, onSelect }) {
   const state = useMapState();
-  const { getOpacity, getFactionScale, rewardTypeById, resolveHexColor } = useMapSelectors();
+  const { getOpacity, getFactionScale, rewardTypeById, resolveHexColor, paletteEntryForHex } = useMapSelectors();
   const clipId = useId();
 
   const { x, y } = hexToPixel(c, r, hexSize);
@@ -24,6 +24,24 @@ export default function HexTile({ c, r, hexSize, entry, isSelected, isDisconnect
     const rt = rewardTypeById(entry.reward);
     return rt ? rewardIconById(rt.iconId) : null;
   }, [entry, rewardTypeById]);
+
+  // A reward's look tracks its Game Setup defence state (see
+  // HexInfoPopup/RewardPanel). It reads as half-opacity only while it's
+  // truly not banked yet: either still sitting on its original
+  // defender, or sitting on a hex nobody has claimed at all. The
+  // moment any player other than the original defender holds it — or,
+  // for a defender-less "free for the taking" reward, the moment any
+  // player claims it at all — it's banked and goes full-opacity. A
+  // ring in the original defender's colour only applies when there
+  // was a defender to take it from, marking it as "someone's trophy,
+  // taken from them" rather than just an ordinary claimed reward.
+  const defenderName = entry && entry.meta ? entry.meta.objectiveOwner : null;
+  const controller = entry ? paletteEntryForHex(entry) : null;
+  const controllerOwner = controller && controller.owner ? controller.owner : null;
+  const rewardCaptured = !!(defenderName && defenderName !== controllerOwner);
+  const rewardBanked = rewardCaptured || (!defenderName && !!controllerOwner);
+  const rewardOpacity = rewardBanked ? 1 : 0.5;
+  const defenderPalette = defenderName ? state.palette.find((p) => p.owner === defenderName) : null;
 
   const unitIcons = entry && entry.icons ? entry.icons : [];
 
@@ -74,18 +92,6 @@ export default function HexTile({ c, r, hexSize, entry, isSelected, isDisconnect
         />
       )}
 
-      <text
-        x={x}
-        y={y + hexSize * 0.62}
-        textAnchor="middle"
-        fontFamily="var(--font-mono)"
-        fontSize={8.5}
-        fill="rgba(207,201,184,0.35)"
-        pointerEvents="none"
-      >
-        {c},{r}
-      </text>
-
       {factionDef && (() => {
         // A smaller hex "medallion" behind the emblem, inset from the
         // tile's own edge so a thin ring of the tile's territory colour
@@ -124,17 +130,40 @@ export default function HexTile({ c, r, hexSize, entry, isSelected, isDisconnect
       })()}
 
       {rewardDef && (
-        <svg
-          x={x - (hexSize * 0.62) / 2}
-          y={y - (hexSize * 0.62) / 2}
-          width={hexSize * 0.62}
-          height={hexSize * 0.62}
-          viewBox="0 0 512 512"
-          pointerEvents="none"
-          style={{ filter: 'drop-shadow(0 0 1.5px rgba(0,0,0,0.95)) drop-shadow(0 0 3px rgba(0,0,0,0.75))' }}
-          dangerouslySetInnerHTML={{ __html: rewardDef.markup }}
-        />
+        <g pointerEvents="none">
+          {rewardCaptured && defenderPalette && state.showCapturedRewardOutlines && (
+            <polygon
+              points={hexPoints(x, y, hexSize * 0.72)}
+              fill="none"
+              stroke={defenderPalette.color}
+              strokeWidth={4}
+              style={{ filter: 'drop-shadow(0 0 1.5px rgba(0,0,0,0.9))' }}
+            />
+          )}
+          <svg
+            x={x - (hexSize * 0.62) / 2}
+            y={y - (hexSize * 0.62) / 2}
+            width={hexSize * 0.62}
+            height={hexSize * 0.62}
+            viewBox="0 0 512 512"
+            opacity={rewardOpacity}
+            style={{ filter: 'drop-shadow(0 0 1.5px rgba(0,0,0,0.95)) drop-shadow(0 0 3px rgba(0,0,0,0.75))' }}
+            dangerouslySetInnerHTML={{ __html: rewardDef.markup }}
+          />
+        </g>
       )}
+
+      <text
+        x={x}
+        y={y + hexSize * 0.62}
+        textAnchor="middle"
+        fontFamily="var(--font-mono)"
+        fontSize={8.5}
+        fill="rgba(207,201,184,0.35)"
+        pointerEvents="none"
+      >
+        {c},{r}
+      </text>
 
       {unitLayout.map((u, i) => {
         const def = iconById(u.iconId);
