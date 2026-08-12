@@ -29,6 +29,7 @@ export const initialState = {
   campaignEffects: [], // [{ id, text }] — GM-managed campaign-wide modifiers, see QuestPanel.
   movementLines: [], // [{ id, fromKey, toKey }] — see MovementControls.jsx
   movementMode: 'none', // 'none' | 'draw' | 'erase'
+  lassoMode: false, // Lasso Select tool — mutually exclusive with movementMode, see SET_LASSO_MODE/SET_MOVEMENT_MODE
   // Hexes multiple factions' arrows are pointing at simultaneously,
   // waiting on the GM to pick a winner — see INITIALIZE_MOVEMENT and
   // SectorContestModal.jsx. [{ hexKey, contenders: [{ color, paletteId, lineIds }] }]
@@ -480,6 +481,7 @@ export function mapReducer(state, action) {
           quest: {
             color: color || DEFAULT_QUEST_COLOR,
             status: 'active',
+            iconId: null, // null = default "!" badge, 'none' = plain badge, else a REWARD_ICONS id
             awardText: '',
             penaltyText: '',
             penaltyScope: 'player',
@@ -565,7 +567,26 @@ export function mapReducer(state, action) {
     // yet) is abandoned — see MovementControls.jsx.
     case 'SET_MOVEMENT_MODE': {
       const mode = action.mode === state.movementMode ? 'none' : action.mode;
-      return { ...state, movementMode: mode };
+      return { ...state, movementMode: mode, lassoMode: false };
+    }
+
+    // Lasso Select tool — mutually exclusive with the movement-line
+    // tools above (same reason: only one drag-gesture tool can own the
+    // canvas's mousedown/move/up at a time). Toggling it on turns
+    // whichever movement tool was active off, and vice versa.
+    case 'SET_LASSO_MODE':
+      return { ...state, lassoMode: !state.lassoMode, movementMode: 'none' };
+
+    // Select every hex the Lasso tool's freeform loop enclosed. Bare
+    // click-drag replaces the selection with just those hexes; holding
+    // Ctrl/Cmd unions them into whatever was already selected (unlike
+    // SELECT_HEX's per-hex toggle, toggling a whole batch at once
+    // would be more confusing than useful here).
+    case 'SELECT_HEXES': {
+      const { keys, additive } = action;
+      const selected = additive ? { ...state.selected } : {};
+      keys.forEach((k) => { selected[k] = true; });
+      return { ...state, selected };
     }
 
     // Erase-mode hex click: drop any line touching this hex. (Drawing

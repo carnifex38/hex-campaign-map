@@ -42,6 +42,7 @@ export function useMapActions() {
       setGridSize: (cols, rows) => dispatch({ type: 'SET_GRID_SIZE', cols, rows }),
       setMapShape: (shape) => dispatch({ type: 'SET_MAP_SHAPE', shape }),
       selectHex: (key, additive) => dispatch({ type: 'SELECT_HEX', key, additive }),
+      selectHexes: (keys, additive) => dispatch({ type: 'SELECT_HEXES', keys, additive }),
       clearSelection: () => dispatch({ type: 'CLEAR_SELECTION' }),
       updateHexMeta: (key, changes) => dispatch({ type: 'UPDATE_HEX_META', key, changes }),
       setObjectiveOwner: (owner) => dispatch({ type: 'SET_OBJECTIVE_OWNER', owner }),
@@ -81,6 +82,7 @@ export function useMapActions() {
       removeCampaignEffect: (id) => dispatch({ type: 'REMOVE_CAMPAIGN_EFFECT', id }),
 
       setMovementMode: (mode) => dispatch({ type: 'SET_MOVEMENT_MODE', mode }),
+      setLassoMode: () => dispatch({ type: 'SET_LASSO_MODE' }),
       movementHexClick: (key) => dispatch({ type: 'MOVEMENT_HEX_CLICK', key }),
       createMovementLine: (fromKey, toKey) => dispatch({ type: 'CREATE_MOVEMENT_LINE', fromKey, toKey }),
       removeMovementLine: (id) => dispatch({ type: 'REMOVE_MOVEMENT_LINE', id }),

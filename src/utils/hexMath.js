@@ -186,6 +186,20 @@ export function arrowGeometry(fromPt, toPt, hexSize) {
   };
 }
 
+// Standard ray-casting point-in-polygon test. Used by the Lasso Select
+// tool (HexMapCanvas) to decide which hex centres fall inside the
+// freeform loop the GM just dragged out.
+export function pointInPolygon(pt, points) {
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const xi = points[i].x, yi = points[i].y;
+    const xj = points[j].x, yj = points[j].y;
+    const intersects = yi > pt.y !== yj > pt.y && pt.x < ((xj - xi) * (pt.y - yi)) / (yj - yi) + xi;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
 // Fisher-Yates. Used by reward randomisation to shuffle both the
 // eligible hex list and the reward "bag" before pairing them up.
 export function shuffleArray(arr) {

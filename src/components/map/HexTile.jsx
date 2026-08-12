@@ -187,27 +187,48 @@ export default function HexTile({ c, r, hexSize, entry, isSelected, isDisconnect
       })}
 
       {entry && entry.quest && entry.quest.status === 'active' && (() => {
-        // Unresolved quest marker's "!" badge, dead-centre in the hex,
+        // Unresolved quest marker's badge, dead-centre in the hex,
         // static (no pulse/scale animation on the badge itself — only
         // the glow ring around the hex breathes; see index.css). The
         // glow ring is drawn separately, in a final pass over the
         // whole grid in HexMapCanvas — see the note there for why
         // (same reason selection outlines moved there too: hexes
         // painted after this one would otherwise cover part of it).
+        //
+        // The badge's inner icon is a GM choice (HexInfoPopup's Icon
+        // dropdown): unset means the classic "!" mark, 'none' means no
+        // badge at all (just the hex's own glow ring marks it as a
+        // live quest), anything else is a REWARD_ICONS id rendered in
+        // the quest's own colour instead of that icon's usual white.
         const quest = entry.quest;
+        if (quest.iconId === 'none') return null;
         const badgeR = hexSize * 0.24;
+        const customIcon = quest.iconId ? rewardIconById(quest.iconId) : null;
         return (
           <g pointerEvents="none">
             <circle cx={x} cy={y} r={badgeR} fill="#14151a" stroke={quest.color} strokeWidth={1.5} />
-            <rect
-              x={x - badgeR * 0.16}
-              y={y - badgeR * 0.55}
-              width={badgeR * 0.32}
-              height={badgeR * 0.78}
-              rx={badgeR * 0.16}
-              fill={quest.color}
-            />
-            <circle cx={x} cy={y + badgeR * 0.46} r={badgeR * 0.17} fill={quest.color} />
+            {customIcon ? (
+              <svg
+                x={x - badgeR * 0.8}
+                y={y - badgeR * 0.8}
+                width={badgeR * 1.6}
+                height={badgeR * 1.6}
+                viewBox="0 0 512 512"
+                dangerouslySetInnerHTML={{ __html: customIcon.markup.replace(/#fff/g, quest.color) }}
+              />
+            ) : (
+              <>
+                <rect
+                  x={x - badgeR * 0.16}
+                  y={y - badgeR * 0.55}
+                  width={badgeR * 0.32}
+                  height={badgeR * 0.78}
+                  rx={badgeR * 0.16}
+                  fill={quest.color}
+                />
+                <circle cx={x} cy={y + badgeR * 0.46} r={badgeR * 0.17} fill={quest.color} />
+              </>
+            )}
           </g>
         );
       })()}

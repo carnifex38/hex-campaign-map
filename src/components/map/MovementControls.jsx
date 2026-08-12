@@ -16,6 +16,7 @@ export default function MovementControls() {
 
   const drawActive = state.movementMode === 'draw';
   const eraseActive = state.movementMode === 'erase';
+  const lassoActive = state.lassoMode;
 
   const btnStyle = (active, accent) => ({
     display: 'flex',
@@ -36,6 +37,8 @@ export default function MovementControls() {
     hint = 'Click and drag from a hex your faction controls to another hex, then release to draw the line.';
   } else if (eraseActive) {
     hint = 'Click a line, or either of its two hexes, to remove it.';
+  } else if (lassoActive) {
+    hint = 'Click and drag to loop around hexes, then release to select every hex inside. Hold Ctrl/Cmd to add to the current selection.';
   } else if (contestCount > 0) {
     hint = `${contestCount} sector${contestCount === 1 ? '' : 's'} contested — resolve the popup to finish claiming.`;
   }
@@ -90,6 +93,15 @@ export default function MovementControls() {
         </button>
         <button
           className="btn-ghost"
+          style={btnStyle(lassoActive, 'var(--gold)')}
+          onClick={() => actions.setLassoMode()}
+          title="Drag a loop around hexes to select all of them at once"
+        >
+          <LassoIcon color={lassoActive ? 'var(--gold)' : 'var(--bone-dim)'} />
+          Lasso Select
+        </button>
+        <button
+          className="btn-ghost"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -130,6 +142,21 @@ function FlagIcon({ color }) {
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
       <line x1="5" y1="3" x2="5" y2="21" stroke={color} strokeWidth="2.2" strokeLinecap="round" />
       <path d="M5 4 L19 7 L5 12 Z" fill={color} />
+    </svg>
+  );
+}
+
+function LassoIcon({ color }) {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+      <path
+        d="M12 3C6.5 3 3 6.2 3 10c0 3 2.3 5.4 6 6.3L7.5 21l3.6-3.4c.3.02.6.03.9.03 5.5 0 9-3.2 9-7 0-3.8-3.5-7-9-7z"
+        stroke={color}
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="7.2" cy="20.2" r="1.4" fill={color} />
     </svg>
   );
 }

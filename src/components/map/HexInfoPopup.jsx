@@ -1,6 +1,6 @@
 import React from 'react';
 import { useMapState, useMapActions, useMapSelectors } from '../../state/MapContext.jsx';
-import { rewardIconById } from '../../data/rewardIcons.js';
+import { REWARD_ICONS, rewardIconById } from '../../data/rewardIcons.js';
 import { DEFAULT_QUEST_COLOR } from '../../state/mapReducer.js';
 
 const textAreaStyle = {
@@ -270,6 +270,21 @@ export default function HexInfoPopup() {
                 >
                   {entry.quest.status}
                 </span>
+              </div>
+
+              <div className="field" style={{ gap: 4 }}>
+                <label style={{ fontSize: 9 }}>Icon</label>
+                <select
+                  value={entry.quest.iconId || ''}
+                  onChange={(e) => actions.updateHexQuest(k, { iconId: e.target.value || null })}
+                  style={{ width: '100%' }}
+                >
+                  <option value="">Exclamation Mark (default)</option>
+                  <option value="none">None</option>
+                  {REWARD_ICONS.map((ic) => (
+                    <option key={ic.id} value={ic.id}>{ic.label}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="field" style={{ gap: 4 }}>

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { calcHexSize, gridPixelSize, key, hexToPixel, hexPoints, parseKey, pixelToHex, arrowGeometry, isInHexagonShape } from '../../utils/hexMath.js';
+import { calcHexSize, gridPixelSize, key, hexToPixel, hexPoints, parseKey, pixelToHex, arrowGeometry, isInHexagonShape, pointInPolygon } from '../../utils/hexMath.js';
 import { useMapState, useMapActions, useMapSelectors } from '../../state/MapContext.jsx';
 import { MOVEMENT_LINE_COLOR } from '../../state/mapReducer.js';
 import { useContainerSize } from '../../hooks/useContainerSize.js';
@@ -19,23 +19,30 @@ export default function HexMapCanvas() {
   // in progress — it only ever becomes real map data (a movementLine)
   // once the drag completes on mouseup, via CREATE_MOVEMENT_LINE.
   const [dragArrow, setDragArrow] = useState(null); // { fromKey, currentPt } | null
+  // Same idea for the Lasso tool's freeform loop — an array of SVG-space
+  // points while dragging, turned into a hex selection on mouseup (see
+  // handleCanvasMouseUp) and never itself stored in app state.
+  const [lassoPoints, setLassoPoints] = useState(null); // [{x,y}, ...] | null
   const movementActive = state.movementMode !== 'none';
-  const { scale, offset, containerRef, handlers, zoomIn, zoomOut, resetView } = useZoomPan({ disabled: movementActive });
+  const lassoActive = state.lassoMode;
+  const toolActive = movementActive || lassoActive;
+  const { scale, offset, containerRef, handlers, zoomIn, zoomOut, resetView } = useZoomPan({ disabled: toolActive });
 
-  // Escape backs out of whichever movement tool is active — same as
-  // clicking its button again (SET_MOVEMENT_MODE toggles off when you
-  // pass the mode that's already active), plus it drops any arrow
-  // that's mid-drag rather than leaving it half-drawn.
+  // Escape backs out of whichever tool is active — same as clicking its
+  // button again — plus it drops any drag in progress (arrow or lasso)
+  // rather than leaving it half-drawn.
   useEffect(() => {
-    if (!movementActive) return undefined;
+    if (!toolActive) return undefined;
     const onKeyDown = (e) => {
       if (e.key !== 'Escape') return;
       setDragArrow(null);
-      actions.setMovementMode(state.movementMode);
+      setLassoPoints(null);
+      if (movementActive) actions.setMovementMode(state.movementMode);
+      else actions.setLassoMode();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [movementActive, state.movementMode, actions]);
+  }, [toolActive, movementActive, state.movementMode, actions]);
 
   const hexSize = useMemo(
     () => calcHexSize(state.cols, state.rows, size.width || 800, size.height || 600),
@@ -77,7 +84,7 @@ export default function HexMapCanvas() {
   // below), so a click there is just a no-op.
   const handleHexClick = (k, additive) => {
     if (state.movementMode === 'erase') actions.movementHexClick(k);
-    else if (!movementActive) actions.selectHex(k, additive);
+    else if (!movementActive && !lassoActive) actions.selectHex(k, additive);
   };
 
   // Mouse coordinates come in as viewport pixels; the grid lives inside
@@ -107,7 +114,11 @@ export default function HexMapCanvas() {
     // map is glitching out. `user-select: none` on the wrapper (below)
     // is the belt-and-braces backup for this same thing.
     e.preventDefault();
-    handlers.onMouseDown(e); // no-ops while movementActive (see useZoomPan's `disabled`)
+    handlers.onMouseDown(e); // no-ops while toolActive (see useZoomPan's `disabled`)
+    if (lassoActive) {
+      setLassoPoints([toSvgPoint(e)]);
+      return;
+    }
     if (state.movementMode !== 'draw') return;
     const pt = toSvgPoint(e);
     const hexKey = pixelToHex(pt.x, pt.y, state.cols, state.rows, hexSize, isValidHex);
@@ -121,12 +132,29 @@ export default function HexMapCanvas() {
 
   const handleCanvasMouseMove = (e) => {
     handlers.onMouseMove(e);
+    if (lassoPoints) {
+      setLassoPoints((pts) => (pts ? [...pts, toSvgPoint(e)] : pts));
+      return;
+    }
     if (!dragArrow) return;
     setDragArrow((d) => (d ? { ...d, currentPt: toSvgPoint(e) } : d));
   };
 
   const handleCanvasMouseUp = (e) => {
     handlers.onMouseUp(e);
+    if (lassoPoints) {
+      // A simple click (no real drag) shouldn't clear the selection —
+      // only a loop with actual area should. Two points is effectively
+      // a single spot.
+      if (lassoPoints.length > 2) {
+        const matched = cells
+          .filter(({ c, r }) => pointInPolygon(hexToPixel(c, r, hexSize), lassoPoints))
+          .map(({ k }) => k);
+        if (matched.length > 0) actions.selectHexes(matched, e.ctrlKey || e.metaKey);
+      }
+      setLassoPoints(null);
+      return;
+    }
     if (!dragArrow) return;
     const pt = toSvgPoint(e);
     const hexKey = pixelToHex(pt.x, pt.y, state.cols, state.rows, hexSize, isValidHex);
@@ -134,7 +162,13 @@ export default function HexMapCanvas() {
     if (hexKey && hexKey !== dragArrow.fromKey) actions.createMovementLine(dragArrow.fromKey, hexKey);
   };
 
-  const canvasCursor = state.movementMode === 'draw' ? 'crosshair' : state.movementMode === 'erase' ? 'not-allowed' : 'grab';
+  const canvasCursor = lassoActive
+    ? 'crosshair'
+    : state.movementMode === 'draw'
+    ? 'crosshair'
+    : state.movementMode === 'erase'
+    ? 'not-allowed'
+    : 'grab';
 
   return (
     <div
@@ -268,6 +302,23 @@ export default function HexMapCanvas() {
               </g>
             );
           })()}
+
+          {/* Mid-drag Lasso loop — the freeform path the GM is dragging
+              out, closed back to its own start point so it previews as
+              the loop it'll become on release (see handleCanvasMouseUp,
+              which runs the actual point-in-polygon test against this
+              same set of points). */}
+          {lassoPoints && lassoPoints.length > 1 && (
+            <polygon
+              points={lassoPoints.map((p) => `${p.x},${p.y}`).join(' ')}
+              fill="rgba(184,150,62,0.08)"
+              stroke="var(--gold)"
+              strokeWidth={2}
+              strokeDasharray="5 4"
+              strokeLinejoin="round"
+              pointerEvents="none"
+            />
+          )}
 
           {/* Movement lines — bold red "war room" arrows, drawn as a
               final pass (same reasoning as the selection ring and quest
