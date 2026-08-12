@@ -10,6 +10,12 @@ import MovementControls from './MovementControls.jsx';
 import SectorContestModal from './SectorContestModal.jsx';
 import HexInfoPopup from './HexInfoPopup.jsx';
 
+// The scaled/translated inner div carries this fixed CSS margin (see
+// its style below) to keep the grid clear of the container's edge —
+// toSvgPoint has to undo it too, or every mouse-derived point (lasso,
+// movement-line drag) comes out shifted by exactly this much.
+const CANVAS_MARGIN = 24;
+
 export default function HexMapCanvas() {
   const state = useMapState();
   const actions = useMapActions();
@@ -91,11 +97,16 @@ export default function HexMapCanvas() {
   // a div that's translated by `offset` and scaled by `scale` (see the
   // transform below), so undo both to land in the SVG's own coordinate
   // space — the same space hexToPixel/hexPoints/arrowGeometry work in.
+  // That div also carries a fixed CSS `margin: 24` (CANVAS_MARGIN
+  // below) which shifts its untransformed position before the
+  // translate/scale ever apply, so it has to come out here too, or
+  // every point comes out offset by exactly that margin — the lasso
+  // loop and movement-line drag both visibly trailing the cursor.
   const toSvgPoint = (e) => {
     const rect = containerRef.current.getBoundingClientRect();
     return {
-      x: (e.clientX - rect.left - offset.x) / scale,
-      y: (e.clientY - rect.top - offset.y) / scale,
+      x: (e.clientX - rect.left - CANVAS_MARGIN - offset.x) / scale,
+      y: (e.clientY - rect.top - CANVAS_MARGIN - offset.y) / scale,
     };
   };
 
@@ -193,7 +204,7 @@ export default function HexMapCanvas() {
           transformOrigin: '0 0',
           width: svgWidth,
           height: svgHeight,
-          margin: 24,
+          margin: CANVAS_MARGIN,
         }}
       >
         <svg width={svgWidth} height={svgHeight} viewBox={`0 0 ${svgWidth} ${svgHeight}`}>
