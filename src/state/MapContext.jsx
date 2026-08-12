@@ -5,16 +5,79 @@ import { findDisconnectedHexes } from '../utils/connectivity.js';
 
 const MapStateContext = createContext(null);
 const MapDispatchContext = createContext(null);
+const MapHistoryContext = createContext(null);
+
+// Action types that change UI focus/tooling rather than actual map
+// content — selection, which movement tool is active, which faction's
+// scale slider is "aimed at". These still run through mapReducer as
+// normal, but don't get their own Undo/Redo step: undoing a colour
+// paint shouldn't also have to undo three clicks of hex selection that
+// happened along the way, and nobody expects "which tool is active" to
+// be something Ctrl+Z steps back through.
+const HISTORY_EXEMPT_ACTIONS = new Set([
+  'SELECT_HEX',
+  'SELECT_HEXES',
+  'CLEAR_SELECTION',
+  'SET_MOVEMENT_MODE',
+  'SET_LASSO_MODE',
+  'SET_ACTIVE_FACTION_ICON',
+]);
+
+const MAX_HISTORY = 100;
+
+// Wraps mapReducer with undo/redo bookkeeping: { past: [...older states], present, future: [...states undone] }.
+// UNDO/REDO themselves are handled here; every other action is applied
+// via the real reducer and then either recorded (pushed onto `past`,
+// clearing `future`) or, for HISTORY_EXEMPT_ACTIONS, applied in place
+// without touching the history stacks at all.
+function historyReducer(history, action) {
+  if (action.type === 'UNDO') {
+    if (history.past.length === 0) return history;
+    const present = history.past[history.past.length - 1];
+    const past = history.past.slice(0, -1);
+    return { past, present, future: [history.present, ...history.future] };
+  }
+  if (action.type === 'REDO') {
+    if (history.future.length === 0) return history;
+    const present = history.future[0];
+    const future = history.future.slice(1);
+    return { past: [...history.past, history.present], present, future };
+  }
+
+  const nextPresent = mapReducer(history.present, action);
+  if (nextPresent === history.present) return history; // genuine no-op, don't record
+
+  if (HISTORY_EXEMPT_ACTIONS.has(action.type)) {
+    return { ...history, present: nextPresent };
+  }
+
+  const past = [...history.past, history.present];
+  if (past.length > MAX_HISTORY) past.shift();
+  return { past, present: nextPresent, future: [] };
+}
 
 export function MapProvider({ children }) {
-  const [state, dispatch] = useReducer(mapReducer, initialState);
+  const [history, dispatch] = useReducer(historyReducer, { past: [], present: initialState, future: [] });
+  const historyInfo = useMemo(
+    () => ({ canUndo: history.past.length > 0, canRedo: history.future.length > 0 }),
+    [history.past.length, history.future.length]
+  );
   return (
-    <MapStateContext.Provider value={state}>
+    <MapStateContext.Provider value={history.present}>
       <MapDispatchContext.Provider value={dispatch}>
-        {children}
+        <MapHistoryContext.Provider value={historyInfo}>
+          {children}
+        </MapHistoryContext.Provider>
       </MapDispatchContext.Provider>
     </MapStateContext.Provider>
   );
+}
+
+// { canUndo, canRedo } — for enabling/disabling Undo/Redo buttons etc.
+export function useMapHistory() {
+  const ctx = useContext(MapHistoryContext);
+  if (!ctx) throw new Error('useMapHistory must be used inside <MapProvider>');
+  return ctx;
 }
 
 export function useMapState() {
@@ -39,6 +102,9 @@ export function useMapActions() {
 
   return useMemo(
     () => ({
+      undo: () => dispatch({ type: 'UNDO' }),
+      redo: () => dispatch({ type: 'REDO' }),
+
       setGridSize: (cols, rows) => dispatch({ type: 'SET_GRID_SIZE', cols, rows }),
       setMapShape: (shape) => dispatch({ type: 'SET_MAP_SHAPE', shape }),
       selectHex: (key, additive) => dispatch({ type: 'SELECT_HEX', key, additive }),

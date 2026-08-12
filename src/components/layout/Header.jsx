@@ -1,13 +1,35 @@
 import React, { useEffect, useState } from 'react';
-import { useMapState, useMapActions } from '../../state/MapContext.jsx';
+import { useMapState, useMapActions, useMapHistory } from '../../state/MapContext.jsx';
 import DropdownMenu from './DropdownMenu.jsx';
 
 export default function Header() {
   const state = useMapState();
   const actions = useMapActions();
+  const { canUndo, canRedo } = useMapHistory();
   const [cols, setCols] = useState(state.cols);
   const [rows, setRows] = useState(state.rows);
   const isHexagon = state.mapShape === 'hexagon';
+
+  // Ctrl/Cmd+Z to undo, Ctrl/Cmd+Shift+Z (or Ctrl+Y) to redo — global,
+  // since undo/redo should work no matter which panel has focus. Skips
+  // while a text field has focus so it doesn't hijack the browser's
+  // own undo inside whatever the GM is typing (mission text, quest
+  // award/penalty notes, etc.) — same guard HexMapCanvas uses for its
+  // mousedown handler, and for the same reason.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const k = e.key.toLowerCase();
+      if (k !== 'z' && k !== 'y') return;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+      const isRedo = k === 'y' || e.shiftKey;
+      e.preventDefault();
+      if (isRedo) actions.redo();
+      else actions.undo();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [actions]);
 
   // The grid can resize itself out from under these local inputs —
   // e.g. switching to Hexagon shape snaps cols/rows to a clean
@@ -61,6 +83,26 @@ export default function Header() {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            className="btn-ghost"
+            onClick={actions.undo}
+            disabled={!canUndo}
+            title="Undo (Ctrl+Z)"
+            style={{ padding: '9px 11px', opacity: canUndo ? 1 : 0.4, cursor: canUndo ? 'pointer' : 'default' }}
+          >
+            <UndoIcon />
+          </button>
+          <button
+            className="btn-ghost"
+            onClick={actions.redo}
+            disabled={!canRedo}
+            title="Redo (Ctrl+Shift+Z)"
+            style={{ padding: '9px 11px', opacity: canRedo ? 1 : 0.4, cursor: canRedo ? 'pointer' : 'default' }}
+          >
+            <RedoIcon />
+          </button>
+        </div>
         <div className="field">
           <label>Map Shape</label>
           <select value={state.mapShape} onChange={(e) => actions.setMapShape(e.target.value)}>
@@ -90,5 +132,23 @@ export default function Header() {
         />
       </div>
     </header>
+  );
+}
+
+function UndoIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+      <path d="M7 7H15C18.3137 7 21 9.68629 21 13C21 16.3137 18.3137 19 15 19H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M10 3L6 7L10 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function RedoIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+      <path d="M17 7H9C5.68629 7 3 9.68629 3 13C3 16.3137 5.68629 19 9 19H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M14 3L18 7L14 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
