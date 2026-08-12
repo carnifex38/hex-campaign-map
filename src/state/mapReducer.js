@@ -11,6 +11,19 @@ let movementLineIdCounter = 0;
 export const DEFAULT_QUEST_COLOR = '#b8963e'; // matches --gold
 export const MOVEMENT_LINE_COLOR = '#d6392f'; // the "war room" red
 
+// Pulled out so RESET_DISPLAY_SETTINGS can restore exactly these
+// values without having to duplicate them (or reset unrelated state by
+// spreading the whole of initialState back in) — see DisplaySettingsPanel's
+// Reset button.
+export const DEFAULT_DISPLAY_SETTINGS = {
+  hexLineColor: '#46402f', // matches the original fixed --hex-stroke value
+  hexLineWidth: 1.5,
+  hexTextColor: '#cfc9b8', // matches --bone
+  hexTextOpacity: 0.35,
+  hexTextSize: 8.5,
+  mapOpacity: 1, // dims the whole rendered grid (hexes, lines, overlays) uniformly
+};
+
 export const initialState = {
   cols: 12,
   rows: 8,
@@ -30,6 +43,11 @@ export const initialState = {
   movementLines: [], // [{ id, fromKey, toKey }] — see MovementControls.jsx
   movementMode: 'none', // 'none' | 'draw' | 'erase'
   lassoMode: false, // Lasso Select tool — mutually exclusive with movementMode, see SET_LASSO_MODE/SET_MOVEMENT_MODE
+
+  // ---- Display Settings (DisplaySettingsPanel.jsx) — map-wide visual
+  // tuning, separate from game content. More knobs land here over time. ----
+  displaySettingsOpen: false,
+  ...DEFAULT_DISPLAY_SETTINGS,
   // Hexes multiple factions' arrows are pointing at simultaneously,
   // waiting on the GM to pick a winner — see INITIALIZE_MOVEMENT and
   // SectorContestModal.jsx. [{ hexKey, contenders: [{ color, paletteId, lineIds }] }]
@@ -388,6 +406,24 @@ export function mapReducer(state, action) {
 
     case 'SET_SHOW_CAPTURED_REWARD_OUTLINES':
       return { ...state, showCapturedRewardOutlines: action.show };
+
+    // ---------------- Display Settings ----------------
+    case 'TOGGLE_DISPLAY_SETTINGS':
+      return { ...state, displaySettingsOpen: !state.displaySettingsOpen };
+    case 'SET_HEX_LINE_COLOR':
+      return { ...state, hexLineColor: action.color };
+    case 'SET_HEX_LINE_WIDTH':
+      return { ...state, hexLineWidth: action.width };
+    case 'SET_HEX_TEXT_COLOR':
+      return { ...state, hexTextColor: action.color };
+    case 'SET_HEX_TEXT_OPACITY':
+      return { ...state, hexTextOpacity: action.opacity };
+    case 'SET_HEX_TEXT_SIZE':
+      return { ...state, hexTextSize: action.size };
+    case 'SET_MAP_OPACITY':
+      return { ...state, mapOpacity: action.opacity };
+    case 'RESET_DISPLAY_SETTINGS':
+      return { ...state, ...DEFAULT_DISPLAY_SETTINGS };
 
     case 'SET_FACTION_SCALE':
       return {

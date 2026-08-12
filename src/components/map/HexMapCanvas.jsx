@@ -9,6 +9,7 @@ import ZoomControls from './ZoomControls.jsx';
 import MovementControls from './MovementControls.jsx';
 import SectorContestModal from './SectorContestModal.jsx';
 import HexInfoPopup from './HexInfoPopup.jsx';
+import DisplaySettingsPanel from './DisplaySettingsPanel.jsx';
 
 // The scaled/translated inner div carries this fixed CSS margin (see
 // its style below) to keep the grid clear of the container's edge —
@@ -205,6 +206,7 @@ export default function HexMapCanvas() {
           width: svgWidth,
           height: svgHeight,
           margin: CANVAS_MARGIN,
+          opacity: state.mapOpacity,
         }}
       >
         <svg width={svgWidth} height={svgHeight} viewBox={`0 0 ${svgWidth} ${svgHeight}`}>
@@ -395,6 +397,7 @@ export default function HexMapCanvas() {
       <ZoomControls scale={scale} onZoomIn={zoomIn} onZoomOut={zoomOut} onReset={resetView} />
       <MovementControls />
       <HexInfoPopup />
+      <DisplaySettingsPanel />
       <SectorContestModal />
     </div>
   );

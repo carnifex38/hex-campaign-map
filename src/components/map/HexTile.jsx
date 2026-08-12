@@ -77,8 +77,8 @@ export default function HexTile({ c, r, hexSize, entry, isSelected, isDisconnect
       <polygon
         points={points}
         fill={fill}
-        stroke={isSelected ? 'var(--gold)' : 'var(--hex-stroke)'}
-        strokeWidth={isSelected ? 2.5 : 1.5}
+        stroke={isSelected ? 'var(--gold)' : state.hexLineColor}
+        strokeWidth={isSelected ? 2.5 : state.hexLineWidth}
         style={{ cursor: 'pointer' }}
         onClick={handleClick}
       />
@@ -159,8 +159,8 @@ export default function HexTile({ c, r, hexSize, entry, isSelected, isDisconnect
         y={y + hexSize * 0.62}
         textAnchor="middle"
         fontFamily="var(--font-mono)"
-        fontSize={8.5}
-        fill="rgba(207,201,184,0.35)"
+        fontSize={state.hexTextSize}
+        fill={hexToRgba(state.hexTextColor, state.hexTextOpacity)}
         pointerEvents="none"
       >
         {c},{r}

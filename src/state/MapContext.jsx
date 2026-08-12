@@ -21,6 +21,7 @@ const HISTORY_EXEMPT_ACTIONS = new Set([
   'SET_MOVEMENT_MODE',
   'SET_LASSO_MODE',
   'SET_ACTIVE_FACTION_ICON',
+  'TOGGLE_DISPLAY_SETTINGS',
 ]);
 
 const MAX_HISTORY = 100;
@@ -132,6 +133,15 @@ export function useMapActions() {
       setFactionOpacity: (opacity) => dispatch({ type: 'SET_FACTION_OPACITY', opacity }),
       setShowCapturedRewardOutlines: (show) => dispatch({ type: 'SET_SHOW_CAPTURED_REWARD_OUTLINES', show }),
       setFactionScale: (iconId, scale) => dispatch({ type: 'SET_FACTION_SCALE', iconId, scale }),
+
+      toggleDisplaySettings: () => dispatch({ type: 'TOGGLE_DISPLAY_SETTINGS' }),
+      setHexLineColor: (color) => dispatch({ type: 'SET_HEX_LINE_COLOR', color }),
+      setHexLineWidth: (width) => dispatch({ type: 'SET_HEX_LINE_WIDTH', width }),
+      setHexTextColor: (color) => dispatch({ type: 'SET_HEX_TEXT_COLOR', color }),
+      setHexTextOpacity: (opacity) => dispatch({ type: 'SET_HEX_TEXT_OPACITY', opacity }),
+      setHexTextSize: (size) => dispatch({ type: 'SET_HEX_TEXT_SIZE', size }),
+      setMapOpacity: (opacity) => dispatch({ type: 'SET_MAP_OPACITY', opacity }),
+      resetDisplaySettings: () => dispatch({ type: 'RESET_DISPLAY_SETTINGS' }),
 
       addRewardType: (iconId) => dispatch({ type: 'ADD_REWARD_TYPE', iconId }),
       updateRewardType: (id, changes) => dispatch({ type: 'UPDATE_REWARD_TYPE', id, changes }),
