@@ -43,11 +43,12 @@ export function hexToPixel(c, r, hexSize) {
 // contains this point" agree for every point that's actually within
 // some hex, and the maxDist cutoff rejects points that are in neither
 // (e.g. a release out past the edge of the grid).
-export function pixelToHex(x, y, cols, rows, hexSize) {
+export function pixelToHex(x, y, cols, rows, hexSize, isValid) {
   let bestKey = null;
   let bestDist = Infinity;
   for (let c = 0; c < cols; c++) {
     for (let r = 0; r < rows; r++) {
+      if (isValid && !isValid(c, r)) continue;
       const p = hexToPixel(c, r, hexSize);
       const dist = Math.hypot(p.x - x, p.y - y);
       if (dist < bestDist) {
@@ -92,6 +93,40 @@ export function hexToRgba(hex, opacity) {
   const b = bigint & 255;
   const a = opacity == null ? 1 : opacity;
   return `rgba(${r},${g},${b},${a})`;
+}
+
+// Converts our odd-q offset coordinates (see hexNeighbors below) to
+// cube coordinates, which is what makes "is this hex within radius N
+// of the centre" a plain distance check instead of a maze of offset
+// special-casing. Used by isInHexagonShape for the Hexagon map shape.
+export function oddQToCube(c, r) {
+  const x = c;
+  const z = r - (c - (c & 1)) / 2;
+  const y = -x - z;
+  return { x, y, z };
+}
+
+export function hexDistance(c1, r1, c2, r2) {
+  const a = oddQToCube(c1, r1);
+  const b = oddQToCube(c2, r2);
+  return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y), Math.abs(a.z - b.z));
+}
+
+// A "hexagon of hexagons" needs an odd diameter to have a true centre
+// hex and stay symmetric — this snaps whatever size the GM typed (or
+// an average of an uneven cols/rows pair) to the nearest clean size.
+export function cleanHexagonDiameter(n) {
+  let v = Math.round(n);
+  if (v % 2 === 0) v += 1;
+  return Math.max(3, Math.min(39, v));
+}
+
+// Whether offset cell (c, r) falls inside a hexagon-shaped map of the
+// given `diameter`, centred in a diameter x diameter bounding box of
+// offset coordinates (see SET_GRID_SIZE/SET_MAP_SHAPE in the reducer).
+export function isInHexagonShape(c, r, diameter) {
+  const radius = (diameter - 1) / 2;
+  return hexDistance(c, r, radius, radius) <= radius;
 }
 
 // The six neighbours of (c, r) in the odd-q offset layout used by

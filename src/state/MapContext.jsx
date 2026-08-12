@@ -40,6 +40,7 @@ export function useMapActions() {
   return useMemo(
     () => ({
       setGridSize: (cols, rows) => dispatch({ type: 'SET_GRID_SIZE', cols, rows }),
+      setMapShape: (shape) => dispatch({ type: 'SET_MAP_SHAPE', shape }),
       selectHex: (key, additive) => dispatch({ type: 'SELECT_HEX', key, additive }),
       clearSelection: () => dispatch({ type: 'CLEAR_SELECTION' }),
       updateHexMeta: (key, changes) => dispatch({ type: 'UPDATE_HEX_META', key, changes }),

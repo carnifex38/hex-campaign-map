@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { useMapState, useMapSelectors } from '../../state/MapContext.jsx';
-import { hexToRgba } from '../../utils/hexMath.js';
+import { hexToRgba, isInHexagonShape } from '../../utils/hexMath.js';
 
 // A small overhead view of the whole board. This is intentionally a
 // simple grid of coloured cells rather than true hex shapes — it's
@@ -21,6 +21,7 @@ export default function MiniMap() {
     const out = [];
     for (let c = 0; c < state.cols; c++) {
       for (let r = 0; r < state.rows; r++) {
+        if (state.mapShape === 'hexagon' && !isInHexagonShape(c, r, state.cols)) continue;
         const k = `${c},${r}`;
         const entry = state.hexData[k];
         const color = entry ? resolveHexColor(entry) : null;
@@ -29,7 +30,7 @@ export default function MiniMap() {
       }
     }
     return out;
-  }, [state.cols, state.rows, state.hexData, getOpacity, resolveHexColor]);
+  }, [state.cols, state.rows, state.mapShape, state.hexData, getOpacity, resolveHexColor]);
 
   const width = state.cols * cellPx + (state.cols % 2 === 0 ? cellPx / 2 : 0);
   const height = state.rows * cellPx + cellPx;

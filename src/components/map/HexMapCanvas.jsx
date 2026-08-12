@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { calcHexSize, gridPixelSize, key, hexToPixel, hexPoints, parseKey, pixelToHex, arrowGeometry } from '../../utils/hexMath.js';
+import { calcHexSize, gridPixelSize, key, hexToPixel, hexPoints, parseKey, pixelToHex, arrowGeometry, isInHexagonShape } from '../../utils/hexMath.js';
 import { useMapState, useMapActions, useMapSelectors } from '../../state/MapContext.jsx';
 import { MOVEMENT_LINE_COLOR } from '../../state/mapReducer.js';
 import { useContainerSize } from '../../hooks/useContainerSize.js';
@@ -46,15 +46,23 @@ export default function HexMapCanvas() {
     [state.cols, state.rows, hexSize]
   );
 
+  // In Hexagon shape, cols/rows are still a square bounding box under
+  // the hood (see SET_MAP_SHAPE/SET_GRID_SIZE in the reducer) — this
+  // is what actually clips it down to the hexagon silhouette, both
+  // for rendering (below) and for hex-hit-testing (isValidHex, used
+  // by the movement-line drag handlers further down).
+  const isValidHex = state.mapShape === 'hexagon' ? (c, r) => isInHexagonShape(c, r, state.cols) : null;
+
   const cells = useMemo(() => {
     const out = [];
     for (let c = 0; c < state.cols; c++) {
       for (let r = 0; r < state.rows; r++) {
+        if (isValidHex && !isValidHex(c, r)) continue;
         out.push({ c, r, k: key(c, r) });
       }
     }
     return out;
-  }, [state.cols, state.rows]);
+  }, [state.cols, state.rows, state.mapShape]);
 
   // Merge our two refs (container-size measurement + zoom/pan) onto the
   // same wrapper element.
@@ -102,7 +110,7 @@ export default function HexMapCanvas() {
     handlers.onMouseDown(e); // no-ops while movementActive (see useZoomPan's `disabled`)
     if (state.movementMode !== 'draw') return;
     const pt = toSvgPoint(e);
-    const hexKey = pixelToHex(pt.x, pt.y, state.cols, state.rows, hexSize);
+    const hexKey = pixelToHex(pt.x, pt.y, state.cols, state.rows, hexSize, isValidHex);
     if (!hexKey) return;
     // Arrows can only start from a hex that's actually claimed — "a
     // controlling sector" — so grabbing an empty/unclaimed hex just
@@ -121,7 +129,7 @@ export default function HexMapCanvas() {
     handlers.onMouseUp(e);
     if (!dragArrow) return;
     const pt = toSvgPoint(e);
-    const hexKey = pixelToHex(pt.x, pt.y, state.cols, state.rows, hexSize);
+    const hexKey = pixelToHex(pt.x, pt.y, state.cols, state.rows, hexSize, isValidHex);
     setDragArrow(null);
     if (hexKey && hexKey !== dragArrow.fromKey) actions.createMovementLine(dragArrow.fromKey, hexKey);
   };

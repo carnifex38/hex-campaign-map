@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useMapState, useMapActions } from '../../state/MapContext.jsx';
 import DropdownMenu from './DropdownMenu.jsx';
 
@@ -7,8 +7,22 @@ export default function Header() {
   const actions = useMapActions();
   const [cols, setCols] = useState(state.cols);
   const [rows, setRows] = useState(state.rows);
+  const isHexagon = state.mapShape === 'hexagon';
+
+  // The grid can resize itself out from under these local inputs —
+  // e.g. switching to Hexagon shape snaps cols/rows to a clean
+  // symmetric size on its own — so keep them in sync with state
+  // rather than only ever pushing local edits outward.
+  useEffect(() => {
+    setCols(state.cols);
+    setRows(state.rows);
+  }, [state.cols, state.rows]);
 
   const applyGridSize = () => actions.setGridSize(Number(cols) || 1, Number(rows) || 1);
+  const handleColsChange = (value) => {
+    setCols(value);
+    if (isHexagon) setRows(value); // Diameter drives both in Hexagon mode
+  };
 
   return (
     <header
@@ -48,13 +62,22 @@ export default function Header() {
 
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14, flexWrap: 'wrap' }}>
         <div className="field">
-          <label>Across</label>
-          <input type="number" min="1" max="40" value={cols} onChange={(e) => setCols(e.target.value)} />
+          <label>Map Shape</label>
+          <select value={state.mapShape} onChange={(e) => actions.setMapShape(e.target.value)}>
+            <option value="rectangle">Rectangle</option>
+            <option value="hexagon">Hexagon</option>
+          </select>
         </div>
         <div className="field">
-          <label>Down</label>
-          <input type="number" min="1" max="40" value={rows} onChange={(e) => setRows(e.target.value)} />
+          <label>{isHexagon ? 'Diameter' : 'Across'}</label>
+          <input type="number" min="3" max="40" value={cols} onChange={(e) => handleColsChange(e.target.value)} />
         </div>
+        {!isHexagon && (
+          <div className="field">
+            <label>Down</label>
+            <input type="number" min="1" max="40" value={rows} onChange={(e) => setRows(e.target.value)} />
+          </div>
+        )}
         <button className="btn-primary" onClick={applyGridSize}>Render Grid</button>
 
         <DropdownMenu

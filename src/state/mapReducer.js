@@ -1,7 +1,7 @@
 import { DEFAULT_PALETTE } from '../data/palette.js';
 import { DEFAULT_REWARD_TYPES } from '../data/defaultRewardTypes.js';
 import { iconById, iconKind } from '../data/legionIcons.js';
-import { normalizeColor } from '../utils/hexMath.js';
+import { normalizeColor, cleanHexagonDiameter, isInHexagonShape } from '../utils/hexMath.js';
 
 let paletteIdCounter = DEFAULT_PALETTE.length;
 let rewardTypeIdCounter = DEFAULT_REWARD_TYPES.length;
@@ -22,6 +22,7 @@ export const initialState = {
   factionIconOpacity: 0.9, // applies to every placed faction emblem, map-wide
   factionIconScale: {}, // iconId -> scale (1 = default), map-wide per faction
   showCapturedRewardOutlines: true, // toggle for the "taken from" defender-colour ring, see RewardPanel
+  mapShape: 'rectangle', // 'rectangle' | 'hexagon' — see SET_MAP_SHAPE, Header's Map Shape dropdown
   activeFactionIcon: null, // which faction's scale slider is currently "aimed at"
   rewardTypes: DEFAULT_REWARD_TYPES,
   teams: {}, // owner (player name) -> team number 1-10. No entry = unassigned.
@@ -125,17 +126,55 @@ function pruneEntry(hexData, k) {
 export function mapReducer(state, action) {
   switch (action.type) {
     case 'SET_GRID_SIZE': {
-      const cols = Math.max(1, Math.min(40, action.cols));
-      const rows = Math.max(1, Math.min(40, action.rows));
-      // Preserve data only for hexes that still exist at the new size.
+      let cols = Math.max(1, Math.min(40, action.cols));
+      let rows = Math.max(1, Math.min(40, action.rows));
+      // A Hexagon-shaped map needs equal, odd cols/rows to stay
+      // centred and symmetric — round whatever the GM typed to the
+      // nearest clean size instead of leaving it lopsided (Header
+      // only shows a single "Diameter" field in this mode anyway, but
+      // this covers programmatic callers too).
+      if (state.mapShape === 'hexagon') {
+        const diameter = cleanHexagonDiameter((cols + rows) / 2);
+        cols = diameter;
+        rows = diameter;
+      }
+      // Preserve data only for hexes that still exist at the new size
+      // (and, in Hexagon mode, still fall inside the hexagon mask).
       const hexData = {};
       for (let c = 0; c < cols; c++) {
         for (let r = 0; r < rows; r++) {
+          if (state.mapShape === 'hexagon' && !isInHexagonShape(c, r, cols)) continue;
           const k = `${c},${r}`;
           if (state.hexData[k]) hexData[k] = state.hexData[k];
         }
       }
       return { ...state, cols, rows, hexData, selected: {} };
+    }
+
+    // Rectangle <-> Hexagon. Switching to Hexagon snaps the current
+    // grid size to the nearest clean odd diameter (see
+    // cleanHexagonDiameter) and drops any hex data sitting outside
+    // that hexagon's footprint; switching back to Rectangle just
+    // restores the ordinary cols x rows grid at its current size —
+    // nothing outside the hexagon existed to prune.
+    case 'SET_MAP_SHAPE': {
+      const mapShape = action.shape === 'hexagon' ? 'hexagon' : 'rectangle';
+      if (mapShape === state.mapShape) return state;
+      let { cols, rows, hexData } = state;
+      if (mapShape === 'hexagon') {
+        const diameter = cleanHexagonDiameter((cols + rows) / 2);
+        cols = diameter;
+        rows = diameter;
+        hexData = {};
+        for (let c = 0; c < cols; c++) {
+          for (let r = 0; r < rows; r++) {
+            if (!isInHexagonShape(c, r, cols)) continue;
+            const k = `${c},${r}`;
+            if (state.hexData[k]) hexData[k] = state.hexData[k];
+          }
+        }
+      }
+      return { ...state, mapShape, cols, rows, hexData, selected: {} };
     }
 
     case 'SELECT_HEX': {
