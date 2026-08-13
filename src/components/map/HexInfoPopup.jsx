@@ -1,7 +1,7 @@
 import React from 'react';
 import { useMapState, useMapActions, useMapSelectors } from '../../state/MapContext.jsx';
 import { REWARD_ICONS, rewardIconById } from '../../data/rewardIcons.js';
-import { DEFAULT_QUEST_COLOR } from '../../state/mapReducer.js';
+import { DEFAULT_QUEST_COLOR, HEX_EFFECTS } from '../../state/mapReducer.js';
 
 const textAreaStyle = {
   width: '100%',
@@ -233,6 +233,22 @@ export default function HexInfoPopup() {
             />
           </div>
         )}
+
+        {/* Purely-visual per-hex effect (HEX_EFFECTS) — no game
+            meaning, just a look the GM can put on a hex. */}
+        <div className="field">
+          <label>Battle Effect</label>
+          <select
+            value={entry.hexEffect || ''}
+            onChange={(e) => actions.setHexEffect(e.target.value || null)}
+            style={{ width: '100%' }}
+          >
+            <option value="">None</option>
+            {HEX_EFFECTS.map((fx) => (
+              <option key={fx.id} value={fx.id}>{fx.label}</option>
+            ))}
+          </select>
+        </div>
 
         {/* Quest marker — a GM-placed event hex. Pulses gold (or a
             custom colour) on the map until resolved: Addressed banks

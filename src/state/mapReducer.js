@@ -11,6 +11,15 @@ let movementLineIdCounter = 0;
 export const DEFAULT_QUEST_COLOR = '#b8963e'; // matches --gold
 export const MOVEMENT_LINE_COLOR = '#d6392f'; // the "war room" red
 
+// Purely-visual per-hex effects (HexTile.jsx renders each one; no game
+// meaning). Listed here once so HexInfoPopup's picker and HexTile's
+// renderer switch both read off the same set instead of duplicating
+// ids/labels — add new effects to this list first.
+export const HEX_EFFECTS = [
+  { id: 'explosions', label: 'Battle (Explosions)' },
+  { id: 'shield', label: 'Force Shield' },
+];
+
 // Pulled out so RESET_DISPLAY_SETTINGS can restore exactly these
 // values without having to duplicate them (or reset unrelated state by
 // spreading the whole of initialState back in) — see DisplaySettingsPanel's
@@ -22,6 +31,17 @@ export const DEFAULT_DISPLAY_SETTINGS = {
   hexTextOpacity: 0.35,
   hexTextSize: 8.5,
   mapOpacity: 1, // dims the whole rendered grid (hexes, lines, overlays) uniformly
+
+  // ---- Battlefield Effects tuning (HexTile.jsx's Force Shield /
+  // Battle-Explosions renderers) — same map-wide "adjust the look"
+  // idea as the hex line/text controls above, just aimed at the two
+  // effects instead of the grid itself. ----
+  shieldColor: '#46aaff',
+  shieldGlowStrength: 1, // 0-2 multiplier on the rim/facet glow's blur + opacity
+  shieldFalloff: 0.4, // 0.1-0.8 — how far out the see-through centre reaches before fading in
+  shieldOpacityStrength: 1, // 0-2 multiplier on facet/rim opacity
+  shieldStencilOpacity: 0, // 0-1 — how much shows through the radial stencil's centre; 0 = fully hidden, 1 = stencil off
+  explosionColor: '#ff8a3d',
 };
 
 export const initialState = {
@@ -39,6 +59,10 @@ export const initialState = {
   activeFactionIcon: null, // which faction's scale slider is currently "aimed at"
   rewardTypes: DEFAULT_REWARD_TYPES,
   teams: {}, // owner (player name) -> team number 1-10. No entry = unassigned.
+  // Hand-typed rewards the GM grants a player directly, independent of
+  // the Reward System and Quest Markers — owner name -> [string, ...].
+  // See PlayerTab's Manual Rewards section.
+  manualPlayerRewards: {},
   campaignEffects: [], // [{ id, text }] — GM-managed campaign-wide modifiers, see QuestPanel.
   movementLines: [], // [{ id, fromKey, toKey }] — see MovementControls.jsx
   movementMode: 'none', // 'none' | 'draw' | 'erase'
@@ -119,7 +143,7 @@ export function teamForOwner(state, owner) {
 function ensureEntry(hexData, k) {
   const existing = hexData[k];
   if (existing) return existing;
-  return { color: null, paletteId: null, icons: [], factionIcon: null, reward: null, quest: null, meta: {} };
+  return { color: null, paletteId: null, icons: [], factionIcon: null, reward: null, quest: null, hexEffect: null, meta: {} };
 }
 
 function metaHasContent(meta) {
@@ -130,7 +154,7 @@ function metaHasContent(meta) {
 // A hex entry that has nothing set is dropped so hexData doesn't
 // accumulate empty placeholders as the user paints/clears.
 function isEmptyEntry(e) {
-  return !e.color && !e.paletteId && !e.factionIcon && !e.reward && !e.quest && (!e.icons || e.icons.length === 0) && !metaHasContent(e.meta);
+  return !e.color && !e.paletteId && !e.factionIcon && !e.reward && !e.quest && !e.hexEffect && (!e.icons || e.icons.length === 0) && !metaHasContent(e.meta);
 }
 
 function pruneEntry(hexData, k) {
@@ -251,6 +275,30 @@ export function mapReducer(state, action) {
       return { ...state, teams };
     }
 
+    // ---------------- Manual Player Rewards (PlayerTab.jsx) — GM hand-
+    // grants a reward directly to a player, independent of the Reward
+    // System (icon placements on hexes) and Quest Markers. ----------------
+    case 'ADD_MANUAL_PLAYER_REWARD': {
+      const { player } = action;
+      if (!player) return state;
+      const list = state.manualPlayerRewards[player] || [];
+      return { ...state, manualPlayerRewards: { ...state.manualPlayerRewards, [player]: [...list, ''] } };
+    }
+    case 'UPDATE_MANUAL_PLAYER_REWARD': {
+      const { player, index, text } = action;
+      if (!player) return state;
+      const list = [...(state.manualPlayerRewards[player] || [])];
+      if (index < 0 || index >= list.length) return state;
+      list[index] = text;
+      return { ...state, manualPlayerRewards: { ...state.manualPlayerRewards, [player]: list } };
+    }
+    case 'REMOVE_MANUAL_PLAYER_REWARD': {
+      const { player, index } = action;
+      if (!player) return state;
+      const list = (state.manualPlayerRewards[player] || []).filter((_, i) => i !== index);
+      return { ...state, manualPlayerRewards: { ...state.manualPlayerRewards, [player]: list } };
+    }
+
     // ---------------- Colour / territory ----------------
     case 'APPLY_COLOR': {
       // paletteId is set when painting from a Legend Key swatch, so the
@@ -269,6 +317,7 @@ export function mapReducer(state, action) {
           factionIcon: existing.factionIcon || null,
           reward: existing.reward || null,
           quest: existing.quest || null,
+          hexEffect: existing.hexEffect || null,
           meta: existing.meta || {},
         };
       }
@@ -422,6 +471,18 @@ export function mapReducer(state, action) {
       return { ...state, hexTextSize: action.size };
     case 'SET_MAP_OPACITY':
       return { ...state, mapOpacity: action.opacity };
+    case 'SET_SHIELD_COLOR':
+      return { ...state, shieldColor: action.color };
+    case 'SET_SHIELD_GLOW_STRENGTH':
+      return { ...state, shieldGlowStrength: action.value };
+    case 'SET_SHIELD_FALLOFF':
+      return { ...state, shieldFalloff: action.value };
+    case 'SET_SHIELD_OPACITY_STRENGTH':
+      return { ...state, shieldOpacityStrength: action.value };
+    case 'SET_SHIELD_STENCIL_OPACITY':
+      return { ...state, shieldStencilOpacity: action.value };
+    case 'SET_EXPLOSION_COLOR':
+      return { ...state, explosionColor: action.color };
     case 'RESET_DISPLAY_SETTINGS':
       return { ...state, ...DEFAULT_DISPLAY_SETTINGS };
 
@@ -538,6 +599,23 @@ export function mapReducer(state, action) {
       const entry = state.hexData[k];
       if (!entry || !entry.quest) return state;
       const hexData = { ...state.hexData, [k]: { ...entry, quest: { ...entry.quest, ...changes } } };
+      return { ...state, hexData };
+    }
+
+    // ---------------- Hex Effects (purely visual — see HexTile's
+    // renderers for each one). No game-state meaning at all, just a
+    // look the GM can put on a hex — a live battle, a shield, etc.
+    // `effect` is one of HEX_EFFECT_IDS or null (none). Applies to
+    // every currently selected hex, though today it's only ever driven
+    // one hex at a time from HexInfoPopup's dropdown. ----------------
+    case 'SET_HEX_EFFECT': {
+      const { effect } = action;
+      let hexData = { ...state.hexData };
+      for (const k of Object.keys(state.selected)) {
+        const entry = ensureEntry(hexData, k);
+        hexData[k] = { ...entry, hexEffect: effect || null };
+        hexData = pruneEntry(hexData, k);
+      }
       return { ...state, hexData };
     }
 

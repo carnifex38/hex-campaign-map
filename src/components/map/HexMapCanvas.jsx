@@ -224,6 +224,16 @@ export default function HexMapCanvas() {
               <rect width="7" height="7" fill="rgba(0,0,0,0.32)" />
               <line x1="0" y1="0" x2="0" y2="7" stroke="rgba(0,0,0,0.28)" strokeWidth="2" />
             </pattern>
+            {/* Force Shield's outer halo (below) uses this instead of a
+                CSS drop-shadow — drop-shadow always renders the crisp
+                source shape *plus* a blurred copy behind it, which is
+                exactly the hard hexagonal outline the GM didn't want.
+                feGaussianBlur alone, with nothing merged back in on top
+                of it, blurs the stroke completely away into a soft
+                bloom — no sharp line survives. */}
+            <filter id="shield-halo-blur" x="-60%" y="-60%" width="220%" height="220%">
+              <feGaussianBlur stdDeviation={2.5 * (state.shieldGlowStrength ?? 1)} />
+            </filter>
           </defs>
           {cells.map(({ c, r, k }) => (
             <HexTile
@@ -279,6 +289,36 @@ export default function HexMapCanvas() {
                 stroke={entry.quest.color}
                 strokeWidth={3}
                 style={{ filter: `drop-shadow(0 0 4px ${entry.quest.color}) drop-shadow(0 0 10px ${entry.quest.color})` }}
+                pointerEvents="none"
+              />
+            );
+          })}
+
+          {/* Force Shield's outer halo — bleeds past the tile's own
+              edge, so same final-pass treatment as the selection
+              outline/quest glow above and for the same reason: drawn
+              per-tile it would get painted over by whichever neighbour
+              happens to render after it, instead of sitting on top the
+              way a glow "around" the hex needs to. The shield's inner
+              rim ring (which stays within the tile) still lives in
+              HexTile — this is only the part that spills outside it. */}
+          {cells.map(({ c, r, k }) => {
+            const entry = state.hexData[k];
+            if (!entry || entry.hexEffect !== 'shield') return null;
+            const { x, y } = hexToPixel(c, r, hexSize);
+            const glow = state.shieldGlowStrength ?? 1;
+            const color = state.shieldColor || '#46aaff';
+            if (glow <= 0) return null;
+            return (
+              <polygon
+                key={`shield-halo-${k}`}
+                className="shield-halo"
+                points={hexPoints(x, y, hexSize * 1.06)}
+                fill="none"
+                stroke={color}
+                strokeWidth={4}
+                opacity={Math.min(1, 0.55 * glow)}
+                style={{ filter: 'url(#shield-halo-blur)' }}
                 pointerEvents="none"
               />
             );

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useMapActions, useMapSelectors } from '../../state/MapContext.jsx';
 import { iconById } from '../../data/legionIcons.js';
 import { rewardIconById } from '../../data/rewardIcons.js';
@@ -27,6 +27,13 @@ export default function PlayerTab({ player, selectedHexKey, isOpen, onToggle, on
   const actions = useMapActions();
   const { rewardTypeById } = useMapSelectors();
 
+  // Which Manual Reward row (by index) is currently editable, if any —
+  // only one at a time. Everything else in that list renders locked
+  // (plain text) until its own edit button is clicked. Purely local UI
+  // state, not persisted — a fresh "+ Add Reward" always starts in
+  // edit mode since it's blank.
+  const [editingRewardIndex, setEditingRewardIndex] = useState(null);
+
   const rewardHexKeys = useMemo(() => {
     const s = new Set();
     player.bankedRewards.forEach((r) => s.add(r.hexKey));
@@ -46,13 +53,8 @@ export default function PlayerTab({ player, selectedHexKey, isOpen, onToggle, on
   const swatchColor = player.factions[0] ? player.factions[0].color : '#7a1e1e';
   const armyEntries = Object.entries(player.armyCounts);
 
-  const lastSection = player.questPenalties.length > 0
-    ? 'penalties'
-    : player.questAwards.length > 0
-    ? 'awards'
-    : player.defendedRewards.length > 0
-    ? 'defending'
-    : 'banked';
+  // Manual Rewards (below) is always rendered, so it's always the true
+  // last section now — nothing above it needs `last` treatment anymore.
 
   return (
     <div>
@@ -160,7 +162,7 @@ export default function PlayerTab({ player, selectedHexKey, isOpen, onToggle, on
             })}
           </Row>
 
-          <Row label="Rewards Banked" last={lastSection === 'banked'}>
+          <Row label="Rewards Banked">
             {player.bankedRewards.length === 0 && <Empty text="No rewards banked." />}
             {player.bankedRewards.map((item) => (
               <RewardRow
@@ -174,7 +176,7 @@ export default function PlayerTab({ player, selectedHexKey, isOpen, onToggle, on
           </Row>
 
           {player.defendedRewards.length > 0 && (
-            <Row label="Defending (Not Yet Banked)" last={lastSection === 'defending'}>
+            <Row label="Defending (Not Yet Banked)">
               {player.defendedRewards.map((item) => (
                 <RewardRow
                   key={item.hexKey}
@@ -195,7 +197,7 @@ export default function PlayerTab({ player, selectedHexKey, isOpen, onToggle, on
               marks a quest on one of this player's hexes Addressed. See
               QuestPanel / HexInfoPopup for where those get written. */}
           {player.questAwards.length > 0 && (
-            <Row label="Quest Awards" last={lastSection === 'awards'}>
+            <Row label="Quest Awards">
               {player.questAwards.map((item) => (
                 <QuestRow
                   key={item.hexKey}
@@ -208,7 +210,7 @@ export default function PlayerTab({ player, selectedHexKey, isOpen, onToggle, on
           )}
 
           {player.questPenalties.length > 0 && (
-            <Row label="Quest Penalties" last={lastSection === 'penalties'}>
+            <Row label="Quest Penalties">
               {player.questPenalties.map((item) => (
                 <QuestRow
                   key={item.hexKey}
@@ -220,8 +222,133 @@ export default function PlayerTab({ player, selectedHexKey, isOpen, onToggle, on
               ))}
             </Row>
           )}
+
+          {/* Hand-typed by the GM right here, independent of the Reward
+              System and Quest Markers entirely — for one-off grants
+              that don't fit either of those flows. */}
+          <Row label="Manual Rewards (GM)" last>
+            {player.manualRewards.length === 0 && <Empty text="None granted yet." />}
+            {player.manualRewards.map((reward, i) => (
+              <ManualRewardRow
+                key={i}
+                reward={reward}
+                editing={editingRewardIndex === i}
+                onStartEdit={() => setEditingRewardIndex(i)}
+                onChange={(text) => actions.updateManualPlayerReward(player.name, i, text)}
+                onFinalize={() => setEditingRewardIndex(null)}
+                onRemove={() => {
+                  actions.removeManualPlayerReward(player.name, i);
+                  setEditingRewardIndex(null);
+                }}
+              />
+            ))}
+            <button
+              className="btn-ghost"
+              onClick={() => {
+                setEditingRewardIndex(player.manualRewards.length);
+                actions.addManualPlayerReward(player.name);
+              }}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 2 }}
+            >
+              <span style={{ fontSize: 13, lineHeight: 1 }}>+</span> Add Reward
+            </button>
+          </Row>
         </div>
       )}
+    </div>
+  );
+}
+
+// One Manual Reward entry — locked (plain text + a recoloured "−" that
+// opens it back up for editing) until its own edit button is clicked,
+// or editable (a live input + a red "×" that removes it outright).
+// Only Enter finalizes/locks it back up — deliberately *not* on blur:
+// clicking the "×" blurs the input a beat before its own click lands,
+// and finalizing on that blur swaps the "×" out for the locked row's
+// "−" out from under the click before it registers, so the remove
+// never actually fires. Enter-only sidesteps that race entirely.
+function ManualRewardRow({ reward, editing, onStartEdit, onChange, onFinalize, onRemove }) {
+  if (editing) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+        <input
+          type="text"
+          autoFocus
+          value={reward}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            onFinalize();
+          }}
+          placeholder="e.g. 50 Requisition Points, Rare Relic..."
+          style={{ flex: 1, minWidth: 0 }}
+        />
+        <button
+          onClick={onRemove}
+          title="Remove this reward"
+          style={{
+            width: 18,
+            height: 18,
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'transparent',
+            border: '1px solid var(--blood-bright)',
+            color: 'var(--blood-bright)',
+            fontSize: 12,
+            lineHeight: 1,
+            padding: 0,
+            borderRadius: 2,
+            cursor: 'pointer',
+          }}
+        >
+          &times;
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+      <div
+        style={{
+          flex: 1,
+          minWidth: 0,
+          padding: '5px 2px',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10.5,
+          color: reward ? 'var(--gold)' : 'var(--bone-dim)',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {reward || '(empty)'}
+      </div>
+      <button
+        onClick={onStartEdit}
+        title="Edit this reward"
+        style={{
+          width: 18,
+          height: 18,
+          flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'transparent',
+          border: '1px solid var(--gold-dim)',
+          color: 'var(--gold-dim)',
+          fontSize: 13,
+          lineHeight: 1,
+          padding: 0,
+          borderRadius: 2,
+          cursor: 'pointer',
+        }}
+      >
+        &minus;
+      </button>
     </div>
   );
 }

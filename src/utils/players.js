@@ -105,6 +105,11 @@ export function buildPlayerSummaries(state) {
       questAwards,
       questPenalties,
       armyCounts,
+      // Hand-typed by the GM directly in this player's tab (see
+      // PlayerTab's Manual Rewards section) — independent of the Reward
+      // System and Quest Markers entirely, so it's just read straight
+      // off state here rather than accumulated from hexData above.
+      manualRewards: state.manualPlayerRewards[rec.name] || [],
     };
   });
 

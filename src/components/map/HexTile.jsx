@@ -4,6 +4,32 @@ import { iconById } from '../../data/legionIcons.js';
 import { rewardIconById } from '../../data/rewardIcons.js';
 import { useMapState, useMapSelectors } from '../../state/MapContext.jsx';
 
+// Deterministic 0-1 "random" from an integer seed — used for the
+// Battle Effect's explosion positions/timings (see the `explosions`
+// useMemo below) so each hex's little bursts stay put at the same
+// spots and on the same cadence across re-renders instead of jumping
+// around every time React re-renders the tile.
+function seededRandom(seed) {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+}
+
+// Blends a hex colour toward white (positive amount) or black (negative
+// amount) — used to derive the explosion's white-hot core and its
+// layered glow tones from a single GM-chosen Explosion Colour instead
+// of hardcoding unrelated shades. Returns a hex string (not rgb(...))
+// so the result can still be fed through hexToRgba for alpha layers.
+function lightenColor(hex, amount) {
+  const clean = (hex || '').replace('#', '');
+  const bigint = parseInt(clean, 16);
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  const adjust = (ch) => Math.max(0, Math.min(255, Math.round(ch + (amount >= 0 ? (255 - ch) : ch) * amount)));
+  const toHex = (n) => n.toString(16).padStart(2, '0');
+  return `#${toHex(adjust(r))}${toHex(adjust(g))}${toHex(adjust(b))}`;
+}
+
 export default function HexTile({ c, r, hexSize, entry, isSelected, isDisconnected, onSelect }) {
   const state = useMapState();
   const { getOpacity, getFactionScale, rewardTypeById, resolveHexColor, paletteEntryForHex } = useMapSelectors();
@@ -67,6 +93,99 @@ export default function HexTile({ c, r, hexSize, entry, isSelected, isDisconnect
       };
     });
   }, [unitIcons, hexSize, x, y]);
+
+  // Hex Effects (HexInfoPopup's "Battle Effect" dropdown — purely
+  // visual, no game meaning). `hexEffect` picks which one, if any.
+  const hexEffect = entry ? entry.hexEffect : null;
+
+  // "Battle (Explosions)": a handful of little explosion bursts at
+  // random spots around the hex's centre, each on its own randomised
+  // size/timing so they don't all flash in lockstep. Positions/timings
+  // are derived from the hex's own coordinates (not Math.random()) so
+  // they stay put across re-renders instead of jumping every time
+  // anything about this hex — or any other hex, triggering a re-render
+  // here — changes; only hexEffect changing, or the hex actually
+  // moving/resizing, should ever recompute them.
+  const explosionsOn = hexEffect === 'explosions';
+  // GM-tunable via Display Settings — one base colour, everything else
+  // (the brighter/darker glow layers, the near-white core) is derived
+  // from it so changing one swatch recolours the whole burst coherently.
+  const explosionColor = state.explosionColor || '#ff8a3d';
+  const explosionCoreColor = lightenColor(explosionColor, 0.75);
+  const explosionGlowFilter = [
+    `drop-shadow(0 0 3px ${hexToRgba(lightenColor(explosionColor, 0.3), 0.95)})`,
+    `drop-shadow(0 0 8px ${hexToRgba(explosionColor, 0.75)})`,
+    `drop-shadow(0 0 16px ${hexToRgba(lightenColor(explosionColor, -0.3), 0.45)})`,
+  ].join(' ');
+  const explosions = useMemo(() => {
+    if (!explosionsOn) return [];
+    const count = 3;
+    const out = [];
+    for (let i = 0; i < count; i++) {
+      const seed = (c + 1) * 9973 + (r + 1) * 6151 + i * 7919;
+      const angle = seededRandom(seed) * Math.PI * 2;
+      const dist = seededRandom(seed + 101) * hexSize * 0.45;
+      const dur = 2.5 + seededRandom(seed + 202) * 3; // 2.5s-5.5s full cycle, most of it idle
+      const begin = seededRandom(seed + 303) * dur; // desyncs bursts from each other
+      out.push({
+        key: i,
+        ex: x + Math.cos(angle) * dist,
+        ey: y + Math.sin(angle) * dist,
+        dur,
+        begin,
+      });
+    }
+    return out;
+  }, [explosionsOn, c, r, hexSize, x, y]);
+
+  // "Force Shield": a dome of small glowing hex facets tiling the
+  // whole tile — like a honeycombed energy sphere — plus a bright rim
+  // ring at the edge for the "curved surface catching the light" look.
+  // The facet grid is generated once per hex (memoised) as a small
+  // "hexagon of hexagons" in axial coordinates (same maths idea as
+  // isInHexagonShape's cube-distance mask, just applied at tile scale
+  // instead of grid scale) and clipped to the tile's own outline so it
+  // never bleeds into neighbours. Brightness/twinkle timing per facet
+  // is seeded off the hex's own coordinates so it stays put across
+  // re-renders and every shielded hex still looks independently alive.
+  const shieldOn = hexEffect === 'shield';
+  const shieldSeed = (c + 1) * 9973 + (r + 1) * 6151;
+  const shieldClipId = useId();
+  const shieldGradId = useId();
+  const shieldMaskId = useId();
+  // GM-tunable via Display Settings.
+  const shieldColor = state.shieldColor || '#46aaff';
+  const shieldGlow = state.shieldGlowStrength ?? 1;
+  const shieldFalloff = Math.min(0.8, Math.max(0.1, state.shieldFalloff ?? 0.4));
+  const shieldOpacityMul = state.shieldOpacityStrength ?? 1;
+  const shieldStencilOpacity = Math.min(1, Math.max(0, state.shieldStencilOpacity ?? 0));
+  const shieldFacetLight = lightenColor(shieldColor, 0.35); // brighter edge tone for facet strokes/rim
+  const shieldOuterPoints = useMemo(() => (shieldOn ? hexPoints(x, y, hexSize * 0.97) : null), [shieldOn, x, y, hexSize]);
+  const shieldFacets = useMemo(() => {
+    if (!shieldOn) return [];
+    const radius = 2; // hexagon-of-hexagons ring radius: 1 + 6 + 12 = 19 facets
+    const subSize = hexSize * 0.26;
+    const out = [];
+    let i = 0;
+    for (let q = -radius; q <= radius; q++) {
+      const rMin = Math.max(-radius, -q - radius);
+      const rMax = Math.min(radius, -q + radius);
+      for (let ar = rMin; ar <= rMax; ar++) {
+        const px = x + subSize * 1.5 * q;
+        const py = y + subSize * Math.sqrt(3) * (ar + q / 2);
+        const seed = shieldSeed + i * 401;
+        out.push({
+          key: i,
+          points: hexPoints(px, py, subSize * 0.88),
+          brightness: 0.35 + seededRandom(seed) * 0.55,
+          dur: 2.2 + seededRandom(seed + 11) * 2.6,
+          begin: seededRandom(seed + 23) * 3,
+        });
+        i += 1;
+      }
+    }
+    return out;
+  }, [shieldOn, x, y, hexSize, shieldSeed]);
 
   const handleClick = (e) => {
     onSelect(`${c},${r}`, e.ctrlKey || e.metaKey);
@@ -185,6 +304,205 @@ export default function HexTile({ c, r, hexSize, entry, isSelected, isDisconnect
           />
         );
       })}
+
+      {explosions.length > 0 && (
+        <g pointerEvents="none">
+          {/* Subtle scrim under the bursts themselves — darkens the
+              tile a touch regardless of its own colour, so a bright
+              flash still pops even on an already-light or same-hued
+              tile instead of blending into it. Each burst gets its own
+              copy, fading in/out on that same burst's own timeline
+              (same dur/begin as its flash below) rather than sitting
+              on permanently — overlapping bursts naturally darken the
+              tile a bit further while more than one is live. */}
+          {explosions.map((ex) => (
+            <polygon key={`scrim-${ex.key}`} points={points} fill="black" opacity="0">
+              <animate
+                attributeName="opacity"
+                values="0;0.32;0.18;0;0"
+                keyTimes="0;0.08;0.22;0.35;1"
+                dur={`${ex.dur}s`}
+                begin={`${ex.begin}s`}
+                repeatCount="indefinite"
+              />
+            </polygon>
+          ))}
+          {explosions.map((ex) => (
+            <g
+              key={ex.key}
+              style={{ filter: explosionGlowFilter }}
+            >
+              {/* Faint expanding shockwave ring — the "viewed from high
+                  up" read, a ring spreading outward and thinning as it
+                  goes rather than a 3D plume. */}
+              <circle cx={ex.ex} cy={ex.ey} r="0" fill="none" stroke={explosionColor} strokeWidth={1.5} opacity="0">
+                <animate
+                  attributeName="r"
+                  values={`0;${hexSize * 0.1};${hexSize * 0.42};${hexSize * 0.42}`}
+                  keyTimes="0;0.08;0.35;1"
+                  dur={`${ex.dur}s`}
+                  begin={`${ex.begin}s`}
+                  repeatCount="indefinite"
+                />
+                <animate
+                  attributeName="opacity"
+                  values="0;0.55;0;0;0"
+                  keyTimes="0;0.1;0.3;0.4;1"
+                  dur={`${ex.dur}s`}
+                  begin={`${ex.begin}s`}
+                  repeatCount="indefinite"
+                />
+              </circle>
+              {/* Outer glow — the bulk of the "light up" flash. */}
+              <circle cx={ex.ex} cy={ex.ey} r="0" fill={explosionColor} opacity="0">
+                <animate
+                  attributeName="r"
+                  values={`0;${hexSize * 0.3};${hexSize * 0.16};0;0`}
+                  keyTimes="0;0.08;0.22;0.35;1"
+                  dur={`${ex.dur}s`}
+                  begin={`${ex.begin}s`}
+                  repeatCount="indefinite"
+                />
+                <animate
+                  attributeName="opacity"
+                  values="0;0.9;0.4;0;0"
+                  keyTimes="0;0.08;0.22;0.35;1"
+                  dur={`${ex.dur}s`}
+                  begin={`${ex.begin}s`}
+                  repeatCount="indefinite"
+                />
+              </circle>
+              {/* Bright white-hot core — flashes fastest, dims down
+                  first, so the burst reads as lighting up then dying
+                  out rather than a flat pulse. */}
+              <circle cx={ex.ex} cy={ex.ey} r="0" fill={explosionCoreColor} opacity="0">
+                <animate
+                  attributeName="r"
+                  values={`0;${hexSize * 0.14};${hexSize * 0.04};0;0`}
+                  keyTimes="0;0.05;0.15;0.25;1"
+                  dur={`${ex.dur}s`}
+                  begin={`${ex.begin}s`}
+                  repeatCount="indefinite"
+                />
+                <animate
+                  attributeName="opacity"
+                  values="0;1;0.5;0;0"
+                  keyTimes="0;0.05;0.15;0.25;1"
+                  dur={`${ex.dur}s`}
+                  begin={`${ex.begin}s`}
+                  repeatCount="indefinite"
+                />
+              </circle>
+            </g>
+          ))}
+        </g>
+      )}
+
+      {shieldOn && (() => {
+        const clamp01 = (n) => Math.min(1, Math.max(0, n));
+        // Falloff stops: shieldFalloff is where the see-through centre
+        // ends, the rest of the way to the edge is a smooth 3-stop fade
+        // back in to fully visible.
+        const f1 = shieldFalloff * 100;
+        const f2 = (shieldFalloff + (1 - shieldFalloff) * 0.35) * 100;
+        const f3 = (shieldFalloff + (1 - shieldFalloff) * 0.7) * 100;
+        // Stencil Opacity raises the mask's minimum luminance so the
+        // "hidden" centre isn't necessarily fully hidden — it lets some
+        // of the effect show through uniformly, still fading up to
+        // fully visible at the edge the same way. 0 = classic fully
+        // see-through centre, 1 = stencil essentially off.
+        const grayStop = (v) => {
+          const n = Math.round(clamp01(v) * 255);
+          return `rgb(${n},${n},${n})`;
+        };
+        const s0 = shieldStencilOpacity;
+        const s1 = shieldStencilOpacity;
+        const s2 = shieldStencilOpacity + (1 - shieldStencilOpacity) * 0.35;
+        const s3 = shieldStencilOpacity + (1 - shieldStencilOpacity) * 0.75;
+        const facetGlowFilter = [
+          `drop-shadow(0 0 ${2 * shieldGlow}px ${hexToRgba(shieldFacetLight, clamp01(0.9 * shieldGlow))})`,
+          `drop-shadow(0 0 ${6 * shieldGlow}px ${hexToRgba(shieldColor, clamp01(0.7 * shieldGlow))})`,
+          `drop-shadow(0 0 ${14 * shieldGlow}px ${hexToRgba(lightenColor(shieldColor, -0.35), clamp01(0.45 * shieldGlow))})`,
+        ].join(' ');
+        const rimGlowFilter = [
+          `drop-shadow(0 0 ${2 * shieldGlow}px ${hexToRgba(shieldFacetLight, clamp01(0.55 * shieldGlow))})`,
+          `drop-shadow(0 0 ${6 * shieldGlow}px ${hexToRgba(shieldColor, clamp01(0.35 * shieldGlow))})`,
+        ].join(' ');
+        return (
+          <g pointerEvents="none">
+            <defs>
+              <clipPath id={shieldClipId}>
+                <polygon points={shieldOuterPoints} />
+              </clipPath>
+              {/* Radial "hole" in the middle of the shield, fading out
+                  toward the edge — reads as a curved, see-through dome
+                  rather than a flat opaque disc. GM's Radial Falloff
+                  controls where the black (hidden) zone ends. Mask
+                  luminance: black = hidden, white = fully shown. */}
+              <radialGradient id={shieldGradId} cx={x} cy={y} r={hexSize * 1.05} gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stopColor={grayStop(s0)} />
+                <stop offset={`${f1}%`} stopColor={grayStop(s1)} />
+                <stop offset={`${f2}%`} stopColor={grayStop(s2)} />
+                <stop offset={`${f3}%`} stopColor={grayStop(s3)} />
+                <stop offset="100%" stopColor="white" />
+              </radialGradient>
+              <mask id={shieldMaskId} maskUnits="userSpaceOnUse">
+                <circle cx={x} cy={y} r={hexSize * 1.05} fill={`url(#${shieldGradId})`} />
+              </mask>
+            </defs>
+            <g
+              clipPath={`url(#${shieldClipId})`}
+              mask={`url(#${shieldMaskId})`}
+              style={{ filter: facetGlowFilter }}
+            >
+              {/* Dark energy-field base tint, so the facets read as a
+                  lit surface over a shadowed sphere rather than floating
+                  on the tile's own territory colour. */}
+              <polygon points={shieldOuterPoints} fill="rgba(6,20,42,0.45)" />
+              {/* The honeycomb of small glowing facets — each one's own
+                  brightness/twinkle timing gives the surface an uneven,
+                  "energy crawling across it" texture instead of a flat
+                  glow, echoing the reference sphere's mottled lighting. */}
+              {shieldFacets.map((facet) => (
+                <polygon
+                  key={facet.key}
+                  points={facet.points}
+                  fill={hexToRgba(shieldColor, clamp01(facet.brightness * 0.3 * shieldOpacityMul))}
+                  stroke={hexToRgba(shieldFacetLight, clamp01(facet.brightness * shieldOpacityMul))}
+                  strokeWidth={hexSize * 0.02}
+                >
+                  <animate
+                    attributeName="opacity"
+                    values="0.6;1;0.6"
+                    dur={`${facet.dur}s`}
+                    begin={`${facet.begin}s`}
+                    repeatCount="indefinite"
+                  />
+                </polygon>
+              ))}
+            </g>
+            {/* Subtle glow ring at the tile's own edge — soft and
+                understated rather than a hard bright line, matching the
+                reference's gentle rim light rather than a hot outline. */}
+            <polygon
+              points={shieldOuterPoints}
+              fill="none"
+              stroke={shieldFacetLight}
+              strokeWidth={1}
+              opacity={clamp01(0.5 * shieldOpacityMul)}
+              style={{ filter: rimGlowFilter }}
+            >
+              <animate
+                attributeName="opacity"
+                values={`${clamp01(0.35 * shieldOpacityMul)};${clamp01(0.6 * shieldOpacityMul)};${clamp01(0.35 * shieldOpacityMul)}`}
+                dur="3.4s"
+                begin={`${seededRandom(shieldSeed) * 2}s`}
+                repeatCount="indefinite"
+              />
+            </polygon>
+          </g>
+        );
+      })()}
 
       {entry && entry.quest && entry.quest.status === 'active' && (() => {
         // Unresolved quest marker's badge, dead-centre in the hex,

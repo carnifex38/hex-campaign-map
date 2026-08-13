@@ -181,6 +181,68 @@ export default function DisplaySettingsPanel() {
           percent: true,
         })}
 
+        <div className="section" style={{ margin: 0, paddingTop: 12 }}>
+          <div className="panel-title" style={{ fontSize: 11, marginBottom: 8 }}>Battlefield Effects</div>
+
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: 1, color: 'var(--gold-dim)', textTransform: 'uppercase', margin: '2px 0 6px' }}>
+            Force Shield
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {row(
+              'Shield Colour',
+              <input
+                type="color"
+                value={state.shieldColor}
+                onChange={(e) => actions.setShieldColor(e.target.value)}
+                style={{ width: 36, height: 28, border: '1px solid var(--steel-line)', background: 'none', padding: 0, cursor: 'pointer', borderRadius: 3 }}
+              />
+            )}
+            {sliderRow('Glow Strength', {
+              value: state.shieldGlowStrength,
+              min: 0,
+              max: 2,
+              step: 0.1,
+              onChange: actions.setShieldGlowStrength,
+            })}
+            {sliderRow('Radial Falloff', {
+              value: state.shieldFalloff,
+              min: 0.1,
+              max: 0.8,
+              step: 0.05,
+              onChange: actions.setShieldFalloff,
+              percent: true,
+            })}
+            {sliderRow('Stencil Opacity', {
+              value: state.shieldStencilOpacity,
+              min: 0,
+              max: 1,
+              step: 0.05,
+              onChange: actions.setShieldStencilOpacity,
+              percent: true,
+            })}
+            {sliderRow('Opacity Strength', {
+              value: state.shieldOpacityStrength,
+              min: 0,
+              max: 2,
+              step: 0.1,
+              onChange: actions.setShieldOpacityStrength,
+            })}
+          </div>
+
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: 1, color: 'var(--gold-dim)', textTransform: 'uppercase', margin: '14px 0 6px' }}>
+            Explosions
+          </div>
+          {row(
+            'Explosion Colour',
+            <input
+              type="color"
+              value={state.explosionColor}
+              onChange={(e) => actions.setExplosionColor(e.target.value)}
+              style={{ width: 36, height: 28, border: '1px solid var(--steel-line)', background: 'none', padding: 0, cursor: 'pointer', borderRadius: 3 }}
+            />
+          )}
+        </div>
+
         <button className="btn-clear" style={{ marginTop: 0 }} onClick={actions.resetDisplaySettings}>
           Reset to Defaults
         </button>

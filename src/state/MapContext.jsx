@@ -115,6 +115,10 @@ export function useMapActions() {
       setObjectiveOwner: (owner) => dispatch({ type: 'SET_OBJECTIVE_OWNER', owner }),
       setPlayerTeam: (owner, team) => dispatch({ type: 'SET_PLAYER_TEAM', owner, team: team || null }),
 
+      addManualPlayerReward: (player) => dispatch({ type: 'ADD_MANUAL_PLAYER_REWARD', player }),
+      updateManualPlayerReward: (player, index, text) => dispatch({ type: 'UPDATE_MANUAL_PLAYER_REWARD', player, index, text }),
+      removeManualPlayerReward: (player, index) => dispatch({ type: 'REMOVE_MANUAL_PLAYER_REWARD', player, index }),
+
       applyColor: (color, paletteId) => dispatch({ type: 'APPLY_COLOR', color, paletteId: paletteId || null }),
       setColorOpacity: (color, opacity) => dispatch({ type: 'SET_COLOR_OPACITY', color, opacity }),
       clearHexColor: () => dispatch({ type: 'CLEAR_HEX_COLOR' }),
@@ -141,6 +145,12 @@ export function useMapActions() {
       setHexTextOpacity: (opacity) => dispatch({ type: 'SET_HEX_TEXT_OPACITY', opacity }),
       setHexTextSize: (size) => dispatch({ type: 'SET_HEX_TEXT_SIZE', size }),
       setMapOpacity: (opacity) => dispatch({ type: 'SET_MAP_OPACITY', opacity }),
+      setShieldColor: (color) => dispatch({ type: 'SET_SHIELD_COLOR', color }),
+      setShieldGlowStrength: (value) => dispatch({ type: 'SET_SHIELD_GLOW_STRENGTH', value }),
+      setShieldFalloff: (value) => dispatch({ type: 'SET_SHIELD_FALLOFF', value }),
+      setShieldOpacityStrength: (value) => dispatch({ type: 'SET_SHIELD_OPACITY_STRENGTH', value }),
+      setShieldStencilOpacity: (value) => dispatch({ type: 'SET_SHIELD_STENCIL_OPACITY', value }),
+      setExplosionColor: (color) => dispatch({ type: 'SET_EXPLOSION_COLOR', color }),
       resetDisplaySettings: () => dispatch({ type: 'RESET_DISPLAY_SETTINGS' }),
 
       addRewardType: (iconId) => dispatch({ type: 'ADD_REWARD_TYPE', iconId }),
@@ -154,6 +164,7 @@ export function useMapActions() {
       updateHexQuest: (key, changes) => dispatch({ type: 'UPDATE_HEX_QUEST', key, changes }),
       clearQuestMarker: () => dispatch({ type: 'CLEAR_QUEST_MARKER' }),
       resolveQuest: (key, outcome) => dispatch({ type: 'RESOLVE_QUEST', key, outcome }),
+      setHexEffect: (effect) => dispatch({ type: 'SET_HEX_EFFECT', effect }),
       addCampaignEffect: (text) => dispatch({ type: 'ADD_CAMPAIGN_EFFECT', text }),
       removeCampaignEffect: (id) => dispatch({ type: 'REMOVE_CAMPAIGN_EFFECT', id }),
 
