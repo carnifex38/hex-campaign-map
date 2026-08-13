@@ -41,6 +41,7 @@ export default function DropdownMenu({ label, items }) {
                 item.onClick();
                 setOpen(false);
               }}
+              title={item.title}
               style={{
                 display: 'block',
                 width: '100%',

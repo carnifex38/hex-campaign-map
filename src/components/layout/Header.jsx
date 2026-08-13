@@ -128,6 +128,14 @@ export default function Header() {
             { label: 'Reset Colours', onClick: actions.resetAllColors },
             { label: 'Clear All Icons', onClick: actions.resetAllIcons },
             { label: 'Clear All Rewards', onClick: actions.resetAllRewards, danger: true },
+            { label: 'Clean All', onClick: actions.cleanAll, danger: true, title: 'Wipes every hex — colours, icons, rewards, quests, battlefield effects — plus movement lines and campaign effects. Grid size, Legend Key, teams, and reward/display setup are left alone.' },
+          ]}
+        />
+
+        <DropdownMenu
+          label="Game Session"
+          items={[
+            { label: 'New Game Setup', onClick: actions.openGameSetup, title: 'Step-by-step wizard: players & teams, territory placement, then defending rewards.' },
           ]}
         />
 

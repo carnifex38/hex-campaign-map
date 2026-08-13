@@ -10,6 +10,7 @@ import MovementControls from './MovementControls.jsx';
 import SectorContestModal from './SectorContestModal.jsx';
 import HexInfoPopup from './HexInfoPopup.jsx';
 import DisplaySettingsPanel from './DisplaySettingsPanel.jsx';
+import GameSetupWizard from './GameSetupWizard.jsx';
 
 // The scaled/translated inner div carries this fixed CSS margin (see
 // its style below) to keep the grid clear of the container's edge —
@@ -90,6 +91,17 @@ export default function HexMapCanvas() {
   // clicks at all now that it's a drag gesture (see the mouse handlers
   // below), so a click there is just a no-op.
   const handleHexClick = (k, additive) => {
+    // New Game Setup's Step 2 (Territory Placement) — a click while a
+    // player is "armed" places their territory instead of selecting
+    // the hex; see GameSetupWizard and PLACE_TERRITORY. Takes priority
+    // over every other tool since the wizard's floating panel stays
+    // open (and clickable) over the map while this is active.
+    if (state.gameSetupArmedPlacement) {
+      const armed = state.gameSetupArmedPlacement;
+      actions.placeTerritory(k, armed.radius, armed.color, armed.paletteId, armed.homeIconId);
+      actions.setGameSetupArmedPlacement(null);
+      return;
+    }
     if (state.movementMode === 'erase') actions.movementHexClick(k);
     else if (!movementActive && !lassoActive) actions.selectHex(k, additive);
   };
@@ -174,7 +186,9 @@ export default function HexMapCanvas() {
     if (hexKey && hexKey !== dragArrow.fromKey) actions.createMovementLine(dragArrow.fromKey, hexKey);
   };
 
-  const canvasCursor = lassoActive
+  const canvasCursor = state.gameSetupArmedPlacement
+    ? 'crosshair'
+    : lassoActive
     ? 'crosshair'
     : state.movementMode === 'draw'
     ? 'crosshair'
@@ -438,6 +452,7 @@ export default function HexMapCanvas() {
       <MovementControls />
       <HexInfoPopup />
       <DisplaySettingsPanel />
+      <GameSetupWizard />
       <SectorContestModal />
     </div>
   );

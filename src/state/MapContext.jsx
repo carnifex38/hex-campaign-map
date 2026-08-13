@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useMemo, useReducer } from 'react';
 import { mapReducer, initialState, getOpacity, getFactionScale, rewardTypeById, paletteEntryForColor, paletteEntryForHex, resolveHexColor, teamForOwner } from './mapReducer.js';
-import { shuffleArray } from '../utils/hexMath.js';
+import { shuffleArray, key, hexDistance, isInHexagonShape } from '../utils/hexMath.js';
 import { findDisconnectedHexes } from '../utils/connectivity.js';
 
 const MapStateContext = createContext(null);
@@ -22,6 +22,9 @@ const HISTORY_EXEMPT_ACTIONS = new Set([
   'SET_LASSO_MODE',
   'SET_ACTIVE_FACTION_ICON',
   'TOGGLE_DISPLAY_SETTINGS',
+  'OPEN_GAME_SETUP',
+  'CLOSE_GAME_SETUP',
+  'SET_GAME_SETUP_ARMED_PLACEMENT',
 ]);
 
 const MAX_HISTORY = 100;
@@ -152,6 +155,71 @@ export function useMapActions() {
       setShieldStencilOpacity: (value) => dispatch({ type: 'SET_SHIELD_STENCIL_OPACITY', value }),
       setExplosionColor: (color) => dispatch({ type: 'SET_EXPLOSION_COLOR', color }),
       resetDisplaySettings: () => dispatch({ type: 'RESET_DISPLAY_SETTINGS' }),
+      cleanAll: () => dispatch({ type: 'CLEAN_ALL' }),
+
+      openGameSetup: () => dispatch({ type: 'OPEN_GAME_SETUP' }),
+      closeGameSetup: () => dispatch({ type: 'CLOSE_GAME_SETUP' }),
+      setGameSetupArmedPlacement: (placement) => dispatch({ type: 'SET_GAME_SETUP_ARMED_PLACEMENT', placement }),
+      replaceState: (nextState) => dispatch({ type: 'REPLACE_STATE', state: nextState }),
+      pruneUnusedPalette: (keepIds) => dispatch({ type: 'PRUNE_UNUSED_PALETTE', keepIds }),
+
+      // Step 2 of the New Game Setup wizard: paints every hex within
+      // `radius` of `centerKey` (cube-distance, same maths as the
+      // Hexagon map shape's mask) with one player's colour, dropping
+      // their home-base emblem on just the centre hex. Needs cols/rows
+      // + the hexagon-shape mask (when active) from state, so it's a
+      // thunk here rather than reducer logic — see PLACE_TERRITORY.
+      placeTerritory: (centerKey, radius, color, paletteId, homeIconId) => {
+        const [ccStr, crStr] = centerKey.split(',');
+        const cc = Number(ccStr);
+        const cr = Number(crStr);
+        const keys = [];
+        for (let c = 0; c < state.cols; c++) {
+          for (let r = 0; r < state.rows; r++) {
+            if (state.mapShape === 'hexagon' && !isInHexagonShape(c, r, state.cols)) continue;
+            if (hexDistance(c, r, cc, cr) <= radius) keys.push(key(c, r));
+          }
+        }
+        dispatch({ type: 'PLACE_TERRITORY', keys, centerKey, color, paletteId, homeIconId });
+      },
+
+      // Step 3 of the New Game Setup wizard: one random pass of
+      // defending rewards across every player's territory at once —
+      // territory is derived live from hexData (whichever hexes carry
+      // that player's paletteId), same "territory = painted colour"
+      // rule the rest of the app already uses, not a separately
+      // tracked region. Always skips the player's own home-base hex
+      // (has factionIcon set) and any hex that already has a reward.
+      // `players`: [{ name, paletteId }].
+      placeDefendingRewards: (players, giveDefender) => {
+        const activeTypes = state.rewardTypes.filter((rt) => rt.enabled !== false && (rt.frequency || 0) > 0);
+        if (activeTypes.length === 0) return { ok: false, reason: 'no-active-types' };
+
+        const placements = [];
+        players.forEach((p) => {
+          const territoryKeys = Object.keys(state.hexData).filter((k) => {
+            const e = state.hexData[k];
+            return e && e.paletteId === p.paletteId && !e.reward && !e.factionIcon;
+          });
+          if (territoryKeys.length === 0) return;
+
+          const bag = [];
+          activeTypes.forEach((rt) => {
+            for (let i = 0; i < rt.frequency; i++) bag.push(rt.id);
+          });
+
+          const shuffledKeys = shuffleArray(territoryKeys);
+          const shuffledBag = shuffleArray(bag);
+          const count = Math.min(shuffledKeys.length, shuffledBag.length);
+          for (let i = 0; i < count; i++) {
+            placements.push({ key: shuffledKeys[i], rewardTypeId: shuffledBag[i], defender: giveDefender ? p.name : null });
+          }
+        });
+
+        if (placements.length === 0) return { ok: false, reason: 'no-eligible-hexes' };
+        dispatch({ type: 'PLACE_DEFENDING_REWARDS', placements });
+        return { ok: true, placed: placements.length };
+      },
 
       addRewardType: (iconId) => dispatch({ type: 'ADD_REWARD_TYPE', iconId }),
       updateRewardType: (id, changes) => dispatch({ type: 'UPDATE_REWARD_TYPE', id, changes }),

@@ -76,6 +76,17 @@ export const initialState = {
   // waiting on the GM to pick a winner — see INITIALIZE_MOVEMENT and
   // SectorContestModal.jsx. [{ hexKey, contenders: [{ color, paletteId, lineIds }] }]
   pendingContests: [],
+
+  // ---- New Game Setup wizard (GameSetupWizard.jsx) — its own step
+  // state/draft player list lives in the component (transient, cheap
+  // to lose); only the coordination flags HexMapCanvas actually needs
+  // to intercept map clicks live here. ----
+  gameSetupOpen: false,
+  // Set while the GM has "armed" a player in Step 2 for territory
+  // placement: { paletteId, color, homeIconId, radius, playerName } |
+  // null. HexMapCanvas checks this before treating a hex click as
+  // ordinary selection — see PLACE_TERRITORY.
+  gameSetupArmedPlacement: null,
 };
 
 // ---- small selectors, exported so components don't reach into state
@@ -545,6 +556,130 @@ export function mapReducer(state, action) {
       }
       return { ...state, hexData };
     }
+
+    // "Clean All" — wipes every hex back to blank (colour, icons,
+    // faction emblem, reward, quest, battlefield effect, GM notes —
+    // everything a hex can carry) plus the map-wide overlays tied to
+    // that content (movement lines, any sector contest waiting to be
+    // resolved, campaign effects). Deliberately leaves the *setup*
+    // alone — grid size/shape, the Legend Key/palette, team
+    // assignments, reward type definitions, display settings, and
+    // each player's Manual Rewards ledger — so the GM doesn't have to
+    // reconfigure the campaign from scratch just to clear the board.
+    case 'CLEAN_ALL':
+      return {
+        ...state,
+        hexData: {},
+        selected: {},
+        colorOpacity: {},
+        movementLines: [],
+        pendingContests: [],
+        campaignEffects: [],
+        movementMode: 'none',
+        lassoMode: false,
+      };
+
+    // ---------------- New Game Setup wizard ----------------
+    case 'OPEN_GAME_SETUP':
+      return { ...state, gameSetupOpen: true, gameSetupArmedPlacement: null };
+    case 'CLOSE_GAME_SETUP':
+      return { ...state, gameSetupOpen: false, gameSetupArmedPlacement: null };
+    case 'SET_GAME_SETUP_ARMED_PLACEMENT':
+      return { ...state, gameSetupArmedPlacement: action.placement };
+
+    // Step 2 (Territory Placement): paints every hex in the
+    // GM-sized blob around `centerKey` with one player's colour, and
+    // drops their chosen home-base emblem on the centre hex only — the
+    // "wraps around the faction icon" look, and what makes
+    // utils/connectivity.js treat the whole blob as one connected
+    // network right away. `keys` is pre-computed by the thunk in
+    // MapContext (needs cols/rows + the hex-distance maths); this case
+    // just applies it, same division of labour as RANDOMIZE_REWARDS.
+    case 'PLACE_TERRITORY': {
+      const { keys, centerKey, color, paletteId, homeIconId } = action;
+      const keySet = new Set(keys);
+      let hexData = { ...state.hexData };
+      // Overwrite, don't accumulate: if this player already has
+      // territory somewhere (a re-placement, picking them again after
+      // an earlier click), drop every hex of theirs that isn't part of
+      // the new blob first, rather than leaving the old blob painted
+      // alongside the new one. Old territory hexes that happen to
+      // still fall inside the *new* blob (a "moved one hex over"
+      // placement, where old and new overlap heavily) aren't dropped,
+      // but their home-base emblem still needs clearing here — the
+      // loop below only ever sets it fresh on the new centre, so
+      // without this the old centre hex would keep showing a second
+      // copy of the icon even though it's no longer the centre.
+      if (paletteId) {
+        const next = {};
+        for (const k of Object.keys(hexData)) {
+          const e = hexData[k];
+          if (e && e.paletteId === paletteId) {
+            if (!keySet.has(k)) continue;
+            next[k] = e.factionIcon ? { ...e, factionIcon: null } : e;
+            continue;
+          }
+          next[k] = e;
+        }
+        hexData = next;
+      }
+      for (const k of keys) {
+        const existing = hexData[k] || {};
+        hexData[k] = {
+          color,
+          paletteId: paletteId || null,
+          icons: existing.icons || [],
+          factionIcon: k === centerKey ? (homeIconId || null) : (existing.factionIcon || null),
+          reward: existing.reward || null,
+          quest: existing.quest || null,
+          hexEffect: existing.hexEffect || null,
+          meta: existing.meta || {},
+        };
+      }
+      return { ...state, hexData, activeColor: color };
+    }
+
+    // End of Step 1 (Players & Teams): trims the Legend Key down to
+    // just "Unclaimed" plus whichever palette entries the GM actually
+    // assigned to a player this session — every other leftover default
+    // faction (or one from a previous campaign) is dropped so the list
+    // stays clean instead of accumulating unused colours. Also drops
+    // any team assignment that's left pointing at an owner name that
+    // no longer has a palette entry.
+    case 'PRUNE_UNUSED_PALETTE': {
+      const keepIds = new Set(action.keepIds);
+      const palette = state.palette.filter((p) => p.name === 'Unclaimed' || keepIds.has(p.id));
+      const validOwners = new Set(palette.filter((p) => p.owner).map((p) => p.owner));
+      const teams = Object.fromEntries(Object.entries(state.teams).filter(([owner]) => validOwners.has(owner)));
+      return { ...state, palette, teams };
+    }
+
+    // Step 3 (Rewards): bulk-applies a pre-rolled list of reward
+    // placements — one dispatch covers every player at once, so
+    // "Place Rewards Randomly" is a single undo step. `defender`, when
+    // set, marks that player as the objective's starting defender
+    // (same SET_OBJECTIVE_OWNER concept RewardPanel already uses) so
+    // the reward reads as "defended, not yet banked" until someone
+    // else captures the tile.
+    case 'PLACE_DEFENDING_REWARDS': {
+      const { placements } = action;
+      const hexData = { ...state.hexData };
+      for (const { key: k, rewardTypeId, defender } of placements) {
+        const existing = ensureEntry(hexData, k);
+        const meta = defender ? { ...existing.meta, objectiveOwner: defender } : existing.meta;
+        hexData[k] = { ...existing, reward: rewardTypeId, meta };
+      }
+      return { ...state, hexData };
+    }
+
+    // Powers the wizard's Cancel button — a full state snapshot taken
+    // when the wizard opened (see GameSetupWizard) gets restored
+    // wholesale, undoing every commit the GM made while stepping
+    // through it. Deliberately a plain, undoable action like everything
+    // else here (not history-exempt) — an accidental Cancel is just one
+    // Ctrl+Z away from being undone itself.
+    case 'REPLACE_STATE':
+      return action.state;
 
     case 'RANDOMIZE_REWARDS': {
       const { eligibleKeys, bag } = action; // pre-shuffled by the thunk in MapContext
