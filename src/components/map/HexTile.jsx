@@ -1,5 +1,5 @@
 import React, { useId, useMemo } from 'react';
-import { hexToPixel, hexPoints, hexToRgba } from '../../utils/hexMath.js';
+import { hexToPixel, hexPoints, hexToRgba, lightenColor } from '../../utils/hexMath.js';
 import { iconById } from '../../data/legionIcons.js';
 import { rewardIconById } from '../../data/rewardIcons.js';
 import { useMapState, useMapSelectors } from '../../state/MapContext.jsx';
@@ -12,22 +12,6 @@ import { useMapState, useMapSelectors } from '../../state/MapContext.jsx';
 function seededRandom(seed) {
   const x = Math.sin(seed) * 10000;
   return x - Math.floor(x);
-}
-
-// Blends a hex colour toward white (positive amount) or black (negative
-// amount) — used to derive the explosion's white-hot core and its
-// layered glow tones from a single GM-chosen Explosion Colour instead
-// of hardcoding unrelated shades. Returns a hex string (not rgb(...))
-// so the result can still be fed through hexToRgba for alpha layers.
-function lightenColor(hex, amount) {
-  const clean = (hex || '').replace('#', '');
-  const bigint = parseInt(clean, 16);
-  const r = (bigint >> 16) & 255;
-  const g = (bigint >> 8) & 255;
-  const b = bigint & 255;
-  const adjust = (ch) => Math.max(0, Math.min(255, Math.round(ch + (amount >= 0 ? (255 - ch) : ch) * amount)));
-  const toHex = (n) => n.toString(16).padStart(2, '0');
-  return `#${toHex(adjust(r))}${toHex(adjust(g))}${toHex(adjust(b))}`;
 }
 
 export default function HexTile({ c, r, hexSize, entry, isSelected, isDisconnected, onSelect }) {

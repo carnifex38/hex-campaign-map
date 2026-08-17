@@ -1,7 +1,7 @@
 import React from 'react';
 import { useMapState, useMapActions, useMapSelectors } from '../../state/MapContext.jsx';
 import { REWARD_ICONS, rewardIconById } from '../../data/rewardIcons.js';
-import { DEFAULT_QUEST_COLOR, HEX_EFFECTS } from '../../state/mapReducer.js';
+import { DEFAULT_QUEST_COLOR, HEX_EFFECTS, ARTILLERY_EFFECT_ID } from '../../state/mapReducer.js';
 
 const textAreaStyle = {
   width: '100%',
@@ -235,7 +235,12 @@ export default function HexInfoPopup() {
         )}
 
         {/* Purely-visual per-hex effect (HEX_EFFECTS) — no game
-            meaning, just a look the GM can put on a hex. */}
+            meaning, just a look the GM can put on a hex. Artillery
+            Strike needs an origin *and* a target, so it's left out of
+            this single-hex list — see ReadoutPanel's dedicated 2-hex
+            selector — except as a disabled, already-selected option if
+            this particular hex happens to be one strike's origin, so
+            the dropdown doesn't just show a blank value for it. */}
         <div className="field">
           <label>Battle Effect</label>
           <select
@@ -244,9 +249,12 @@ export default function HexInfoPopup() {
             style={{ width: '100%' }}
           >
             <option value="">None</option>
-            {HEX_EFFECTS.map((fx) => (
+            {HEX_EFFECTS.filter((fx) => fx.id !== ARTILLERY_EFFECT_ID).map((fx) => (
               <option key={fx.id} value={fx.id}>{fx.label}</option>
             ))}
+            {entry.hexEffect === ARTILLERY_EFFECT_ID && (
+              <option value={ARTILLERY_EFFECT_ID} disabled>Artillery Strike (origin) — select 2 hexes to reconfigure</option>
+            )}
           </select>
         </div>
 

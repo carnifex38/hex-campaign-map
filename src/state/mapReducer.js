@@ -18,7 +18,15 @@ export const MOVEMENT_LINE_COLOR = '#d6392f'; // the "war room" red
 export const HEX_EFFECTS = [
   { id: 'explosions', label: 'Battle (Explosions)' },
   { id: 'shield', label: 'Force Shield' },
+  // Needs two hexes (an origin and a target), not one — see
+  // SET_HEX_EFFECT below and ReadoutPanel's dedicated 2-hex selector.
+  // Excluded from HexInfoPopup's single-hex picker and ReadoutPanel's
+  // bulk N-hex dropdown; ARTILLERY_ONLY_EFFECT_ID exists so both of
+  // those can filter it out by reference instead of a hardcoded string.
+  { id: 'artillery', label: 'Artillery Strike' },
 ];
+
+export const ARTILLERY_EFFECT_ID = 'artillery';
 
 // Pulled out so RESET_DISPLAY_SETTINGS can restore exactly these
 // values without having to duplicate them (or reset unrelated state by
@@ -42,6 +50,8 @@ export const DEFAULT_DISPLAY_SETTINGS = {
   shieldOpacityStrength: 1, // 0-2 multiplier on facet/rim opacity
   shieldStencilOpacity: 0, // 0-1 — how much shows through the radial stencil's centre; 0 = fully hidden, 1 = stencil off
   explosionColor: '#ff8a3d',
+  artillerySpeed: 1, // 0.25-3 multiplier on shell flight time (higher = faster shell, shorter time in the air)
+  artilleryFrequency: 1, // 0.25-3 multiplier on fire rate (higher = shorter pause between shots)
 };
 
 export const initialState = {
@@ -154,7 +164,7 @@ export function teamForOwner(state, owner) {
 function ensureEntry(hexData, k) {
   const existing = hexData[k];
   if (existing) return existing;
-  return { color: null, paletteId: null, icons: [], factionIcon: null, reward: null, quest: null, hexEffect: null, meta: {} };
+  return { color: null, paletteId: null, icons: [], factionIcon: null, reward: null, quest: null, hexEffect: null, artilleryTarget: null, meta: {} };
 }
 
 function metaHasContent(meta) {
@@ -329,6 +339,7 @@ export function mapReducer(state, action) {
           reward: existing.reward || null,
           quest: existing.quest || null,
           hexEffect: existing.hexEffect || null,
+          artilleryTarget: existing.artilleryTarget || null,
           meta: existing.meta || {},
         };
       }
@@ -494,6 +505,10 @@ export function mapReducer(state, action) {
       return { ...state, shieldStencilOpacity: action.value };
     case 'SET_EXPLOSION_COLOR':
       return { ...state, explosionColor: action.color };
+    case 'SET_ARTILLERY_SPEED':
+      return { ...state, artillerySpeed: action.value };
+    case 'SET_ARTILLERY_FREQUENCY':
+      return { ...state, artilleryFrequency: action.value };
     case 'RESET_DISPLAY_SETTINGS':
       return { ...state, ...DEFAULT_DISPLAY_SETTINGS };
 
@@ -633,6 +648,7 @@ export function mapReducer(state, action) {
           reward: existing.reward || null,
           quest: existing.quest || null,
           hexEffect: existing.hexEffect || null,
+          artilleryTarget: existing.artilleryTarget || null,
           meta: existing.meta || {},
         };
       }
@@ -737,18 +753,37 @@ export function mapReducer(state, action) {
       return { ...state, hexData };
     }
 
-    // ---------------- Hex Effects (purely visual — see HexTile's
-    // renderers for each one). No game-state meaning at all, just a
-    // look the GM can put on a hex — a live battle, a shield, etc.
-    // `effect` is one of HEX_EFFECT_IDS or null (none). Applies to
-    // every currently selected hex, though today it's only ever driven
-    // one hex at a time from HexInfoPopup's dropdown. ----------------
+    // ---------------- Hex Effects (purely visual — see HexTile's and
+    // ArtilleryStrike's renderers for each one). No game-state meaning
+    // at all, just a look the GM can put on a hex — a live battle, a
+    // shield, a passing shot, etc. `effect` is one of HEX_EFFECTS' ids
+    // or null (none). Applies to every currently selected hex — except
+    // 'artillery', which needs an origin *and* a target rather than a
+    // uniform per-hex look, so it's handled as a special case below
+    // instead of falling through to the general loop. ----------------
     case 'SET_HEX_EFFECT': {
       const { effect } = action;
+      const keys = Object.keys(state.selected);
+
+      if (effect === ARTILLERY_EFFECT_ID) {
+        // Needs exactly an origin and a target — whichever hex was
+        // selected first is the origin, whichever second is the target
+        // (see SELECT_HEX's insertion-order preservation). Anything
+        // else selected makes the pairing ambiguous, so this is a
+        // no-op rather than guessing; ReadoutPanel only ever offers
+        // this control once selection is down to exactly two anyway.
+        if (keys.length !== 2) return state;
+        const [originKey, targetKey] = keys;
+        let hexData = { ...state.hexData };
+        const originEntry = ensureEntry(hexData, originKey);
+        hexData[originKey] = { ...originEntry, hexEffect: ARTILLERY_EFFECT_ID, artilleryTarget: targetKey };
+        return { ...state, hexData };
+      }
+
       let hexData = { ...state.hexData };
-      for (const k of Object.keys(state.selected)) {
+      for (const k of keys) {
         const entry = ensureEntry(hexData, k);
-        hexData[k] = { ...entry, hexEffect: effect || null };
+        hexData[k] = { ...entry, hexEffect: effect || null, artilleryTarget: null };
         hexData = pruneEntry(hexData, k);
       }
       return { ...state, hexData };

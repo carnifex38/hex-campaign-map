@@ -5,6 +5,7 @@ import { MOVEMENT_LINE_COLOR } from '../../state/mapReducer.js';
 import { useContainerSize } from '../../hooks/useContainerSize.js';
 import { useZoomPan } from '../../hooks/useZoomPan.js';
 import HexTile from './HexTile.jsx';
+import ArtilleryStrike from './ArtilleryStrike.jsx';
 import ZoomControls from './ZoomControls.jsx';
 import MovementControls from './MovementControls.jsx';
 import SectorContestModal from './SectorContestModal.jsx';
@@ -78,6 +79,12 @@ export default function HexMapCanvas() {
     }
     return out;
   }, [state.cols, state.rows, state.mapShape]);
+
+  // For Artillery Strike's render guard below — a strike's target key
+  // is just a stored string, so if the grid shrinks or the map shape
+  // changes out from under it, this catches a now-out-of-bounds target
+  // instead of trying to render a shot flying off into deleted space.
+  const cellKeySet = useMemo(() => new Set(cells.map((c) => c.k)), [cells]);
 
   // Merge our two refs (container-size measurement + zoom/pan) onto the
   // same wrapper element.
@@ -444,6 +451,20 @@ export default function HexMapCanvas() {
                 />
               </g>
             );
+          })}
+
+          {/* Artillery Strike — a passive, indefinitely-looping origin
+              -> target shot, same Battle Effect mechanism as Force
+              Shield/Battle (Explosions) (entry.hexEffect, set via
+              ReadoutPanel's 2-hex selector) rather than a one-off
+              triggered action. Same final-pass treatment as the
+              movement-line arrows above so the shell/trail/bursts
+              always sit on top of every hex regardless of draw order. */}
+          {cells.map(({ k }) => {
+            const entry = state.hexData[k];
+            if (!entry || entry.hexEffect !== 'artillery' || !entry.artilleryTarget) return null;
+            if (!cellKeySet.has(entry.artilleryTarget)) return null;
+            return <ArtilleryStrike key={`arty-${k}`} originKey={k} targetKey={entry.artilleryTarget} hexSize={hexSize} />;
           })}
         </svg>
       </div>

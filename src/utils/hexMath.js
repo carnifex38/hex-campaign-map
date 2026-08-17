@@ -95,6 +95,24 @@ export function hexToRgba(hex, opacity) {
   return `rgba(${r},${g},${b},${a})`;
 }
 
+// Blends a hex colour toward white (positive amount) or black (negative
+// amount) — used to derive an effect's brighter/darker glow tones and
+// white-hot core from a single GM-chosen base colour instead of
+// hardcoding unrelated shades. Returns a hex string (not rgb(...)) so
+// the result can still be fed through hexToRgba for alpha layers.
+// Shared by HexTile's Battle Effect explosions and ArtilleryStrike's
+// launch/impact bursts and shell.
+export function lightenColor(hex, amount) {
+  const clean = (hex || '').replace('#', '');
+  const bigint = parseInt(clean, 16);
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  const adjust = (ch) => Math.max(0, Math.min(255, Math.round(ch + (amount >= 0 ? (255 - ch) : ch) * amount)));
+  const toHex = (n) => n.toString(16).padStart(2, '0');
+  return `#${toHex(adjust(r))}${toHex(adjust(g))}${toHex(adjust(b))}`;
+}
+
 // Converts our odd-q offset coordinates (see hexNeighbors below) to
 // cube coordinates, which is what makes "is this hex within radius N
 // of the centre" a plain distance check instead of a maze of offset
@@ -184,6 +202,25 @@ export function arrowGeometry(fromPt, toPt, hexSize) {
     start,
     tip,
   };
+}
+
+// Geometry for the Artillery Strike effect (ArtilleryStrike.jsx) — a
+// quadratic-bezier arc from one hex centre to another that bows upward
+// (screen "up", not perpendicular to the shot line) like a real
+// ballistic arc, with both the arc's height and the shell's flight
+// time scaling with how far the shot has to travel so a cross-map shot
+// visibly lobs higher and takes longer than a next-door one.
+export function artilleryArc(fromPt, toPt, hexSize) {
+  const dx = toPt.x - fromPt.x;
+  const dy = toPt.y - fromPt.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  const mx = (fromPt.x + toPt.x) / 2;
+  const my = (fromPt.y + toPt.y) / 2;
+  const height = Math.min(hexSize * 5, Math.max(hexSize * 0.9, dist * 0.4));
+  const controlPt = { x: mx, y: my - height };
+  const path = `M ${fromPt.x},${fromPt.y} Q ${controlPt.x},${controlPt.y} ${toPt.x},${toPt.y}`;
+  const flightMs = Math.round(Math.min(2400, Math.max(550, 420 + dist * 1.15)));
+  return { path, dist, height, flightMs };
 }
 
 // Standard ray-casting point-in-polygon test. Used by the Lasso Select

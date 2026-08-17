@@ -154,6 +154,8 @@ export function useMapActions() {
       setShieldOpacityStrength: (value) => dispatch({ type: 'SET_SHIELD_OPACITY_STRENGTH', value }),
       setShieldStencilOpacity: (value) => dispatch({ type: 'SET_SHIELD_STENCIL_OPACITY', value }),
       setExplosionColor: (color) => dispatch({ type: 'SET_EXPLOSION_COLOR', color }),
+      setArtillerySpeed: (value) => dispatch({ type: 'SET_ARTILLERY_SPEED', value }),
+      setArtilleryFrequency: (value) => dispatch({ type: 'SET_ARTILLERY_FREQUENCY', value }),
       resetDisplaySettings: () => dispatch({ type: 'RESET_DISPLAY_SETTINGS' }),
       cleanAll: () => dispatch({ type: 'CLEAN_ALL' }),
 

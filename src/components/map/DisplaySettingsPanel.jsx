@@ -241,6 +241,26 @@ export default function DisplaySettingsPanel() {
               style={{ width: 36, height: 28, border: '1px solid var(--steel-line)', background: 'none', padding: 0, cursor: 'pointer', borderRadius: 3 }}
             />
           )}
+
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: 1, color: 'var(--gold-dim)', textTransform: 'uppercase', margin: '14px 0 6px' }}>
+            Artillery Strike
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {sliderRow('Shell Speed', {
+              value: state.artillerySpeed,
+              min: 0.25,
+              max: 3,
+              step: 0.25,
+              onChange: actions.setArtillerySpeed,
+            })}
+            {sliderRow('Fire Rate', {
+              value: state.artilleryFrequency,
+              min: 0.25,
+              max: 3,
+              step: 0.25,
+              onChange: actions.setArtilleryFrequency,
+            })}
+          </div>
         </div>
 
         <button className="btn-clear" style={{ marginTop: 0 }} onClick={actions.resetDisplaySettings}>
