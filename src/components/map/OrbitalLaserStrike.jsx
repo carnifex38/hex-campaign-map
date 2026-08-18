@@ -292,11 +292,28 @@ export default function OrbitalLaserStrike({ targetKey, hexSize }) {
         const lineX2 = cycleKeyframes([originPt.x, targetPt.x, targetPt.x, sweepEnd.x, sweepEnd.x], [0, extendLocal, growEndLocal, sweepEndLocal, 1], vStart(0), vDur(beamTotalFrac));
         const lineY2 = cycleKeyframes([originPt.y, targetPt.y, targetPt.y, sweepEnd.y, sweepEnd.y], [0, extendLocal, growEndLocal, sweepEndLocal, 1], vStart(0), vDur(beamTotalFrac));
         const beamOpacity = cycleKeyframes(['1', '1', '0'], [0, sweepEndLocal, 1], vStart(0), vDur(beamTotalFrac));
+        // Once the drag stops, the beam doesn't just fade transparent
+        // at full width — it visibly narrows down to a sliver over the
+        // same vanish window, reading as the beam actually powering
+        // down/dissipating rather than a flat opacity cross-fade.
+        const lineStrokeWidth = cycleKeyframes(
+          [beamHalf * 2, beamHalf * 2, beamHalf * 0.2],
+          [0, sweepEndLocal, 1],
+          vStart(0),
+          vDur(beamTotalFrac)
+        );
 
         // Glow circle — invisible (zero radius) until the line
         // actually lands, then grows in, then tracks the same drag the
-        // line's bottom end does.
-        const circleR = cycleKeyframes([0, 0, impactCoreR, impactCoreR], [0, extendLocal, growEndLocal, 1], vStart(0), vDur(beamTotalFrac));
+        // line's bottom end does, then shrinks back down over that same
+        // vanish window — the contact point visibly closing up as the
+        // beam switches off, instead of just fading out at full size.
+        const circleR = cycleKeyframes(
+          [0, 0, impactCoreR, impactCoreR, 0],
+          [0, extendLocal, growEndLocal, sweepEndLocal, 1],
+          vStart(0),
+          vDur(beamTotalFrac)
+        );
         const circleCx = cycleKeyframes([targetPt.x, targetPt.x, sweepEnd.x, sweepEnd.x], [0, growEndLocal, sweepEndLocal, 1], vStart(0), vDur(beamTotalFrac));
         const circleCy = cycleKeyframes([targetPt.y, targetPt.y, sweepEnd.y, sweepEnd.y], [0, growEndLocal, sweepEndLocal, 1], vStart(0), vDur(beamTotalFrac));
 
@@ -441,6 +458,7 @@ export default function OrbitalLaserStrike({ targetKey, hexSize }) {
               <line x1={originPt.x} y1={originPt.y} x2={originPt.x} y2={originPt.y} stroke={`url(#${beamGradId})`} strokeWidth={beamHalf * 2} strokeLinecap="round" style={{ filter: glowFilter }}>
                 <animate attributeName="x2" values={lineX2.values} keyTimes={lineX2.keyTimes} dur={`${superCycleS}s`} begin={`${phaseBeginS}s`} repeatCount="indefinite" />
                 <animate attributeName="y2" values={lineY2.values} keyTimes={lineY2.keyTimes} dur={`${superCycleS}s`} begin={`${phaseBeginS}s`} repeatCount="indefinite" />
+                <animate attributeName="stroke-width" values={lineStrokeWidth.values} keyTimes={lineStrokeWidth.keyTimes} dur={`${superCycleS}s`} begin={`${phaseBeginS}s`} repeatCount="indefinite" />
               </line>
 
               {/* Glow — grows out from the point of impact once the
