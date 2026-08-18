@@ -1,33 +1,6 @@
 import React, { useId, useMemo } from 'react';
-import { hexToPixel, parseKey, artilleryArc, hexToRgba, lightenColor } from '../../utils/hexMath.js';
+import { hexToPixel, parseKey, artilleryArc, hexToRgba, lightenColor, cycleKeyframes } from '../../utils/hexMath.js';
 import { useMapState } from '../../state/MapContext.jsx';
-
-// Builds `values`/`keyTimes` strings for a burst/flourish that should
-// play out over [startFrac, startFrac+durFrac] of a longer, indefinitely
-// looping animation `dur` — the same idea as HexTile's Battle Effect
-// explosions ("2.5s-5.5s full cycle, most of it idle"), just
-// parameterised so ArtilleryStrike's launch/impact bursts can share one
-// cycle with the shell's flight/trail instead of running on their own
-// independent clock. `localValues`/`localKeyTimes` describe the burst's
-// own shape on a 0-1 timeline (0 = burst starts, 1 = burst's own end).
-function cycleKeyframes(localValues, localKeyTimes, startFrac, durFrac) {
-  const values = [];
-  const keyTimes = [];
-  if (startFrac > 0) {
-    values.push(localValues[0]);
-    keyTimes.push(0);
-  }
-  localKeyTimes.forEach((kt, i) => {
-    values.push(localValues[i]);
-    keyTimes.push(Math.min(1, startFrac + kt * durFrac));
-  });
-  const endFrac = startFrac + durFrac;
-  if (endFrac < 1) {
-    values.push(localValues[localValues.length - 1]);
-    keyTimes.push(1);
-  }
-  return { values: values.join(';'), keyTimes: keyTimes.join(';') };
-}
 
 // A passive, indefinitely-looping Artillery Strike — same idea as
 // HexTile's Battle Effect explosions or Force Shield: pick it from the

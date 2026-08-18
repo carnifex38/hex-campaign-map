@@ -20,6 +20,7 @@ export const HEX_EFFECTS = [
   { id: 'shield', label: 'Force Shield' },
   { id: 'radar', label: 'Radar Sweep' },
   { id: 'warp', label: 'Warp Rift' },
+  { id: 'laser', label: 'Orbital Laser Strike' },
   // Needs two hexes (an origin and a target), not one — see
   // SET_HEX_EFFECT below and ReadoutPanel's dedicated 2-hex selector.
   // Excluded from HexInfoPopup's single-hex picker and ReadoutPanel's
@@ -72,6 +73,8 @@ export const DEFAULT_DISPLAY_SETTINGS = {
   warpSpeed: 0, // 0-15 — how fast the turbulence flows/reshapes
   warpBorder: 0, // 0-12 — glowing containment-ring thickness
   warpReshape: 2, // 0-10 — smooth crossfade-driven "morphing" rate; 0 = pure rotation, no reshaping
+  laserColor: '#5ec8ff', // bright energy-beam blue
+  laserFrequency: 1, // 0.25-3 multiplier on fire rate (higher = shorter pause between strikes)
 };
 
 export const initialState = {
@@ -541,6 +544,10 @@ export function mapReducer(state, action) {
       return { ...state, warpBorder: action.value };
     case 'SET_WARP_RESHAPE':
       return { ...state, warpReshape: action.value };
+    case 'SET_LASER_COLOR':
+      return { ...state, laserColor: action.color };
+    case 'SET_LASER_FREQUENCY':
+      return { ...state, laserFrequency: action.value };
     case 'RESET_DISPLAY_SETTINGS':
       return { ...state, ...DEFAULT_DISPLAY_SETTINGS };
 

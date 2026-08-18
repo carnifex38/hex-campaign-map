@@ -384,6 +384,29 @@ export default function DisplaySettingsPanel() {
               })}
             </>
           )}
+
+          {section(
+            'laser',
+            'Orbital Laser Strike',
+            <>
+              {row(
+                'Beam Colour',
+                <input
+                  type="color"
+                  value={state.laserColor}
+                  onChange={(e) => actions.setLaserColor(e.target.value)}
+                  style={{ width: 36, height: 28, border: '1px solid var(--steel-line)', background: 'none', padding: 0, cursor: 'pointer', borderRadius: 3 }}
+                />
+              )}
+              {sliderRow('Strike Interval', {
+                value: state.laserFrequency,
+                min: 0.25,
+                max: 3,
+                step: 0.25,
+                onChange: actions.setLaserFrequency,
+              })}
+            </>
+          )}
         </div>
 
         <button className="btn-clear" style={{ marginTop: 0 }} onClick={actions.resetDisplaySettings}>

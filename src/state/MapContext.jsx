@@ -162,6 +162,8 @@ export function useMapActions() {
       setWarpSpeed: (value) => dispatch({ type: 'SET_WARP_SPEED', value }),
       setWarpBorder: (value) => dispatch({ type: 'SET_WARP_BORDER', value }),
       setWarpReshape: (value) => dispatch({ type: 'SET_WARP_RESHAPE', value }),
+      setLaserColor: (color) => dispatch({ type: 'SET_LASER_COLOR', color }),
+      setLaserFrequency: (value) => dispatch({ type: 'SET_LASER_FREQUENCY', value }),
       resetDisplaySettings: () => dispatch({ type: 'RESET_DISPLAY_SETTINGS' }),
       cleanAll: () => dispatch({ type: 'CLEAN_ALL' }),
 

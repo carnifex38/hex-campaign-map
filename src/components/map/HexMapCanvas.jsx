@@ -6,6 +6,7 @@ import { useContainerSize } from '../../hooks/useContainerSize.js';
 import { useZoomPan } from '../../hooks/useZoomPan.js';
 import HexTile from './HexTile.jsx';
 import ArtilleryStrike from './ArtilleryStrike.jsx';
+import OrbitalLaserStrike from './OrbitalLaserStrike.jsx';
 import ZoomControls from './ZoomControls.jsx';
 import MovementControls from './MovementControls.jsx';
 import SectorContestModal from './SectorContestModal.jsx';
@@ -465,6 +466,20 @@ export default function HexMapCanvas() {
             if (!entry || entry.hexEffect !== 'artillery' || !entry.artilleryTarget) return null;
             if (!cellKeySet.has(entry.artilleryTarget)) return null;
             return <ArtilleryStrike key={`arty-${k}`} originKey={k} targetKey={entry.artilleryTarget} hexSize={hexSize} />;
+          })}
+
+          {/* Orbital Laser Strike — a passive, indefinitely-looping
+              single-hex Battle Effect (entry.hexEffect === 'laser', set
+              the normal way — no second hex to pick, the "orbit" origin
+              is a fixed offset from the target). Same final-pass
+              treatment as Artillery Strike above and for the same
+              reason: the beam originates well outside the target
+              tile's own outline, so it can't be clipped to one hex the
+              way Radar Sweep/Warp Rift are. */}
+          {cells.map(({ k }) => {
+            const entry = state.hexData[k];
+            if (!entry || entry.hexEffect !== 'laser') return null;
+            return <OrbitalLaserStrike key={`laser-${k}`} targetKey={k} hexSize={hexSize} />;
           })}
         </svg>
       </div>

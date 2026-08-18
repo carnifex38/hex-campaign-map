@@ -223,6 +223,35 @@ export function artilleryArc(fromPt, toPt, hexSize) {
   return { path, dist, height, flightMs };
 }
 
+// Builds `values`/`keyTimes` strings for a burst/flourish that should
+// play out over [startFrac, startFrac+durFrac] of a longer, indefinitely
+// looping animation `dur` — the same idea as HexTile's Battle Effect
+// explosions ("2.5s-5.5s full cycle, most of it idle"), just
+// parameterised so an effect's individual flourishes (a burst, a flash,
+// a fade) can share one cycle with the rest of its animation instead of
+// each running on its own independent clock. `localValues`/
+// `localKeyTimes` describe the flourish's own shape on a 0-1 timeline
+// (0 = it starts, 1 = its own end). Shared by ArtilleryStrike.jsx and
+// OrbitalLaserStrike.jsx.
+export function cycleKeyframes(localValues, localKeyTimes, startFrac, durFrac) {
+  const values = [];
+  const keyTimes = [];
+  if (startFrac > 0) {
+    values.push(localValues[0]);
+    keyTimes.push(0);
+  }
+  localKeyTimes.forEach((kt, i) => {
+    values.push(localValues[i]);
+    keyTimes.push(Math.min(1, startFrac + kt * durFrac));
+  });
+  const endFrac = startFrac + durFrac;
+  if (endFrac < 1) {
+    values.push(localValues[localValues.length - 1]);
+    keyTimes.push(1);
+  }
+  return { values: values.join(';'), keyTimes: keyTimes.join(';') };
+}
+
 // Standard ray-casting point-in-polygon test. Used by the Lasso Select
 // tool (HexMapCanvas) to decide which hex centres fall inside the
 // freeform loop the GM just dragged out.
