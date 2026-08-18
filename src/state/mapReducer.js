@@ -18,6 +18,7 @@ export const MOVEMENT_LINE_COLOR = '#d6392f'; // the "war room" red
 export const HEX_EFFECTS = [
   { id: 'explosions', label: 'Battle (Explosions)' },
   { id: 'shield', label: 'Force Shield' },
+  { id: 'radar', label: 'Radar Sweep' },
   // Needs two hexes (an origin and a target), not one — see
   // SET_HEX_EFFECT below and ReadoutPanel's dedicated 2-hex selector.
   // Excluded from HexInfoPopup's single-hex picker and ReadoutPanel's
@@ -52,6 +53,7 @@ export const DEFAULT_DISPLAY_SETTINGS = {
   explosionColor: '#ff8a3d',
   artillerySpeed: 1, // 0.25-3 multiplier on shell flight time (higher = faster shell, shorter time in the air)
   artilleryFrequency: 1, // 0.25-3 multiplier on fire rate (higher = shorter pause between shots)
+  radarColor: '#39ff8f', // classic phosphor green
 };
 
 export const initialState = {
@@ -509,6 +511,8 @@ export function mapReducer(state, action) {
       return { ...state, artillerySpeed: action.value };
     case 'SET_ARTILLERY_FREQUENCY':
       return { ...state, artilleryFrequency: action.value };
+    case 'SET_RADAR_COLOR':
+      return { ...state, radarColor: action.color };
     case 'RESET_DISPLAY_SETTINGS':
       return { ...state, ...DEFAULT_DISPLAY_SETTINGS };
 

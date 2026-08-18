@@ -171,6 +171,15 @@ export default function HexTile({ c, r, hexSize, entry, isSelected, isDisconnect
     return out;
   }, [shieldOn, x, y, hexSize, shieldSeed]);
 
+  // "Radar Sweep": a simplified scope face — two concentric rings, a
+  // crosshair, and a rotating sweep wedge that fades out behind its own
+  // leading edge, echoing a classic circular radar display shrunk down
+  // to tile scale. Clipped to the tile's own outline the same way the
+  // Force Shield's facets are, so it never bleeds into neighbours.
+  const radarOn = hexEffect === 'radar';
+  const radarClipId = useId();
+  const radarColor = state.radarColor || '#39ff8f';
+
   const handleClick = (e) => {
     onSelect(`${c},${r}`, e.ctrlKey || e.metaKey);
   };
@@ -484,6 +493,85 @@ export default function HexTile({ c, r, hexSize, entry, isSelected, isDisconnect
                 repeatCount="indefinite"
               />
             </polygon>
+          </g>
+        );
+      })()}
+
+      {radarOn && (() => {
+        // ringR/innerR are deliberately a bit smaller than the tile's
+        // own radius (a flat-top hex's inradius, along its flat
+        // top/bottom edges, is only ~0.87x its own "radius") so the
+        // rings and crosshair sit fully inside the tile instead of
+        // getting clipped flat by those edges. The sweep reaches the
+        // same distance as the outer ring, so it never overshoots it.
+        const ringR = hexSize * 0.78;
+        const innerR = hexSize * 0.44;
+        const sweepSlices = 14;
+        const arcSpan = 65; // degrees the trailing fade covers behind the leading edge
+        const sweepDur = 4; // seconds per full rotation
+        const rad = (deg) => (deg * Math.PI) / 180;
+        const rimPoint = (deg) => ({
+          px: x + ringR * Math.cos(rad(deg)),
+          py: y + ringR * Math.sin(rad(deg)),
+        });
+        const glowFilter = [
+          `drop-shadow(0 0 1.5px ${hexToRgba(lightenColor(radarColor, 0.4), 0.9)})`,
+          `drop-shadow(0 0 4px ${hexToRgba(radarColor, 0.6)})`,
+        ].join(' ');
+        return (
+          <g pointerEvents="none">
+            <defs>
+              <clipPath id={radarClipId}>
+                <polygon points={hexPoints(x, y, hexSize * 0.97)} />
+              </clipPath>
+            </defs>
+            <g clipPath={`url(#${radarClipId})`}>
+              {/* Dark scope face so the sweep/rings read clearly
+                  regardless of the tile's own territory colour. */}
+              <polygon points={hexPoints(x, y, hexSize)} fill="rgba(2,10,6,0.6)" />
+
+              {/* Static chrome: two rings, a crosshair, a centre dot —
+                  a shrunk-down echo of a classic radar scope's face. */}
+              <g style={{ filter: glowFilter }} opacity={0.55}>
+                <circle cx={x} cy={y} r={ringR} fill="none" stroke={radarColor} strokeWidth={1} />
+                <circle cx={x} cy={y} r={innerR} fill="none" stroke={radarColor} strokeWidth={0.75} />
+                <line x1={x - ringR} y1={y} x2={x + ringR} y2={y} stroke={radarColor} strokeWidth={0.6} />
+                <line x1={x} y1={y - ringR} x2={x} y2={y + ringR} stroke={radarColor} strokeWidth={0.6} />
+                <circle cx={x} cy={y} r={hexSize * 0.035} fill={radarColor} />
+              </g>
+
+              {/* Rotating sweep — a fan of thin slices fading out behind
+                  the bright leading edge, the whole fan rotating
+                  together via one animateTransform rather than each
+                  slice animating on its own. */}
+              <g style={{ filter: glowFilter }}>
+                {Array.from({ length: sweepSlices }, (_, i) => i).map((i) => {
+                  const a0 = -((i / sweepSlices) * arcSpan);
+                  const a1 = -(((i + 1) / sweepSlices) * arcSpan);
+                  const p0 = rimPoint(a0);
+                  const p1 = rimPoint(a1);
+                  const opacity = 0.5 * Math.pow(1 - i / sweepSlices, 1.6);
+                  return (
+                    <polygon
+                      key={i}
+                      points={`${x},${y} ${p0.px},${p0.py} ${p1.px},${p1.py}`}
+                      fill={radarColor}
+                      opacity={opacity}
+                    />
+                  );
+                })}
+                {/* Bright leading-edge scan line. */}
+                <line x1={x} y1={y} x2={x + ringR} y2={y} stroke={lightenColor(radarColor, 0.5)} strokeWidth={1.4} opacity={0.9} />
+                <animateTransform
+                  attributeName="transform"
+                  type="rotate"
+                  from={`0 ${x} ${y}`}
+                  to={`360 ${x} ${y}`}
+                  dur={`${sweepDur}s`}
+                  repeatCount="indefinite"
+                />
+              </g>
+            </g>
           </g>
         );
       })()}

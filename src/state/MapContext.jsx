@@ -156,6 +156,7 @@ export function useMapActions() {
       setExplosionColor: (color) => dispatch({ type: 'SET_EXPLOSION_COLOR', color }),
       setArtillerySpeed: (value) => dispatch({ type: 'SET_ARTILLERY_SPEED', value }),
       setArtilleryFrequency: (value) => dispatch({ type: 'SET_ARTILLERY_FREQUENCY', value }),
+      setRadarColor: (color) => dispatch({ type: 'SET_RADAR_COLOR', color }),
       resetDisplaySettings: () => dispatch({ type: 'RESET_DISPLAY_SETTINGS' }),
       cleanAll: () => dispatch({ type: 'CLEAN_ALL' }),
 
