@@ -157,6 +157,11 @@ export function useMapActions() {
       setArtillerySpeed: (value) => dispatch({ type: 'SET_ARTILLERY_SPEED', value }),
       setArtilleryFrequency: (value) => dispatch({ type: 'SET_ARTILLERY_FREQUENCY', value }),
       setRadarColor: (color) => dispatch({ type: 'SET_RADAR_COLOR', color }),
+      setWarpPalette: (palette) => dispatch({ type: 'SET_WARP_PALETTE', palette }),
+      setWarpChaos: (value) => dispatch({ type: 'SET_WARP_CHAOS', value }),
+      setWarpSpeed: (value) => dispatch({ type: 'SET_WARP_SPEED', value }),
+      setWarpBorder: (value) => dispatch({ type: 'SET_WARP_BORDER', value }),
+      setWarpReshape: (value) => dispatch({ type: 'SET_WARP_RESHAPE', value }),
       resetDisplaySettings: () => dispatch({ type: 'RESET_DISPLAY_SETTINGS' }),
       cleanAll: () => dispatch({ type: 'CLEAN_ALL' }),
 

@@ -19,6 +19,7 @@ export const HEX_EFFECTS = [
   { id: 'explosions', label: 'Battle (Explosions)' },
   { id: 'shield', label: 'Force Shield' },
   { id: 'radar', label: 'Radar Sweep' },
+  { id: 'warp', label: 'Warp Rift' },
   // Needs two hexes (an origin and a target), not one — see
   // SET_HEX_EFFECT below and ReadoutPanel's dedicated 2-hex selector.
   // Excluded from HexInfoPopup's single-hex picker and ReadoutPanel's
@@ -28,6 +29,18 @@ export const HEX_EFFECTS = [
 ];
 
 export const ARTILLERY_EFFECT_ID = 'artillery';
+
+// Warp Rift's selectable "faction alignment" palettes — id/label here
+// for HexInfoPopup/DisplaySettingsPanel's picker, the actual colour
+// stops live in HexTile.jsx next to the renderer that uses them (same
+// division as HEX_EFFECTS itself: ids/labels are shared state-layer
+// concerns, the visual detail is a rendering concern).
+export const WARP_PALETTES = [
+  { id: 'tzeentch', label: 'Tzeentch (Empyrean Purple)' },
+  { id: 'nurgle', label: 'Nurgle (Plague Bloom)' },
+  { id: 'khorne', label: 'Khorne (Blood Tide)' },
+  { id: 'slaanesh', label: 'Slaanesh (Excess Neon)' },
+];
 
 // Pulled out so RESET_DISPLAY_SETTINGS can restore exactly these
 // values without having to duplicate them (or reset unrelated state by
@@ -54,6 +67,11 @@ export const DEFAULT_DISPLAY_SETTINGS = {
   artillerySpeed: 1, // 0.25-3 multiplier on shell flight time (higher = faster shell, shorter time in the air)
   artilleryFrequency: 1, // 0.25-3 multiplier on fire rate (higher = shorter pause between shots)
   radarColor: '#39ff8f', // classic phosphor green
+  warpPalette: 'tzeentch', // one of WARP_PALETTES' ids
+  warpChaos: 8, // 1-15 — how violently the rift's turbulence distorts
+  warpSpeed: 0, // 0-15 — how fast the turbulence flows/reshapes
+  warpBorder: 0, // 0-12 — glowing containment-ring thickness
+  warpReshape: 2, // 0-10 — smooth crossfade-driven "morphing" rate; 0 = pure rotation, no reshaping
 };
 
 export const initialState = {
@@ -513,6 +531,16 @@ export function mapReducer(state, action) {
       return { ...state, artilleryFrequency: action.value };
     case 'SET_RADAR_COLOR':
       return { ...state, radarColor: action.color };
+    case 'SET_WARP_PALETTE':
+      return { ...state, warpPalette: action.palette };
+    case 'SET_WARP_CHAOS':
+      return { ...state, warpChaos: action.value };
+    case 'SET_WARP_SPEED':
+      return { ...state, warpSpeed: action.value };
+    case 'SET_WARP_BORDER':
+      return { ...state, warpBorder: action.value };
+    case 'SET_WARP_RESHAPE':
+      return { ...state, warpReshape: action.value };
     case 'RESET_DISPLAY_SETTINGS':
       return { ...state, ...DEFAULT_DISPLAY_SETTINGS };
 

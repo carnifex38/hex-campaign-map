@@ -1,8 +1,21 @@
-import React, { useId, useMemo } from 'react';
+import React, { useId, useMemo, useState } from 'react';
 import { hexToPixel, hexPoints, hexToRgba, lightenColor } from '../../utils/hexMath.js';
 import { iconById } from '../../data/legionIcons.js';
 import { rewardIconById } from '../../data/rewardIcons.js';
 import { useMapState, useMapSelectors } from '../../state/MapContext.jsx';
+
+// Warp Rift's colour treatment per Faction Warp Alignment (GM's
+// Display Settings pick, see WARP_PALETTES in mapReducer.js for the
+// id/label list) — a dark base tone the turbulence mask reveals
+// through (the `stops`, centre-to-edge), plus an `accent` (rim glow)
+// and `vein` (bright crackling highlight layer) tone. Keys match
+// WARP_PALETTES' ids exactly.
+const WARP_PALETTE_COLORS = {
+  tzeentch: { stops: ['#120a2b', '#4a1f78', '#9b2fd1'], accent: '#45f3ff', vein: '#ff6bf0' },
+  nurgle: { stops: ['#0f1409', '#3c4a12', '#7c8f1f'], accent: '#a3ee32', vein: '#d9c24a' },
+  khorne: { stops: ['#150404', '#4a0808', '#8f1010'], accent: '#ff3333', vein: '#ff8a3d' },
+  slaanesh: { stops: ['#170a2e', '#5c1a63', '#c22fb0'], accent: '#ff45db', vein: '#45f3ff' },
+};
 
 // Deterministic 0-1 "random" from an integer seed — used for the
 // Battle Effect's explosion positions/timings (see the `explosions`
@@ -179,6 +192,45 @@ export default function HexTile({ c, r, hexSize, entry, isSelected, isDisconnect
   const radarOn = hexEffect === 'radar';
   const radarClipId = useId();
   const radarColor = state.radarColor || '#39ff8f';
+
+  // "Warp Rift": an animated, GM-recolourable turbulence texture
+  // standing in for a tear into the Immaterium. feTurbulence is SVG's
+  // native equivalent of the layered sine/cosine "domain warp" noise a
+  // hand-rolled canvas shader would compute per-pixel — using it here
+  // instead of a per-frame canvas loop means the browser composites
+  // the effect (cheap, GPU-friendly) rather than this component
+  // re-running JS math every frame, which matters a lot once several
+  // hexes have this effect live at once. Clipped to the tile's own
+  // outline the same way Force Shield/Radar Sweep are.
+  const warpOn = hexEffect === 'warp';
+  const warpSeed = (c + 1) * 7919 + (r + 1) * 104729; // stays put across re-renders, unique-ish per hex
+  const warpClipId = useId();
+  const warpFilterId = useId();
+  // Two extra static-noise variants for smooth "reshaping" (see
+  // reshapeOn below) — a crossfade between three differently-seeded
+  // static masks reads as organic morphing without ever having to
+  // re-rasterise the turbulence itself, unlike animating baseFrequency
+  // directly (see the note further down on why that looked jerky).
+  // Always allocated (React hooks can't be called conditionally) but
+  // only actually referenced when Reshape Rate is above 0.
+  const warpFilterId2 = useId();
+  const warpFilterId3 = useId();
+  const warpVeinFilterId = useId();
+  const warpMaskId = useId();
+  const warpMaskId2 = useId();
+  const warpMaskId3 = useId();
+  const warpVeinMaskId = useId();
+  const warpGradId = useId();
+  const warpPaletteKey = WARP_PALETTE_COLORS[state.warpPalette] ? state.warpPalette : 'tzeentch';
+  const warpPalette = WARP_PALETTE_COLORS[warpPaletteKey];
+  const warpChaos = state.warpChaos ?? 6;
+  const warpSpeedVal = state.warpSpeed ?? 4;
+  const warpBorder = state.warpBorder ?? 4;
+  const warpReshapeVal = state.warpReshape ?? 4;
+  // Hover "shifts everything toward the cursor" parallax — purely local
+  // UI state (not map data), reset the moment the cursor leaves. { dx,
+  // dy } is the cursor's offset from the tile centre, in SVG units.
+  const [warpHover, setWarpHover] = useState(null);
 
   const handleClick = (e) => {
     onSelect(`${c},${r}`, e.ctrlKey || e.metaKey);
@@ -572,6 +624,198 @@ export default function HexTile({ c, r, hexSize, entry, isSelected, isDisconnect
                 />
               </g>
             </g>
+          </g>
+        );
+      })()}
+
+      {warpOn && (() => {
+        const half = hexSize;
+        // Chaos (1-15) sets the noise's spatial grain — higher means
+        // finer, busier detail. Speed (0-15) sets how fast the
+        // revealed pattern rotates. The turbulence itself is generated
+        // once (a fixed baseFrequency, no animation on it) and then
+        // just *rotated* — animating baseFrequency directly reshapes
+        // the noise every tick, which is expensive enough that
+        // browsers visibly throttle it, giving a jerky "flipbook" look
+        // instead of smooth motion. A transform rotation is cheap,
+        // GPU-composited motion with no re-rasterising, so it stays
+        // smooth regardless of how complex the underlying noise is.
+        const baseFreq = 0.01 + warpChaos * 0.0025;
+        const veinFreq = baseFreq * 2.6;
+        const dur = Math.max(1.5, 16 / Math.max(0.3, warpSpeedVal));
+        const veinDur = dur * 0.65;
+        // Parallax: coloured layers nudge toward wherever the cursor
+        // is hovering, a fraction of its actual offset so it reads as
+        // a gentle depth shift rather than tracking 1:1.
+        const hoverDx = warpHover ? warpHover.dx * 0.18 : 0;
+        const hoverDy = warpHover ? warpHover.dy * 0.18 : 0;
+
+        // Reshape (optional, Reshape Rate > 0): three differently-seeded
+        // *static* noise masks, crossfaded via opacity — each one is
+        // rasterised once and never touched again, so the "morphing"
+        // comes entirely from a cheap opacity blend (compositor-only,
+        // always smooth) rather than regenerating noise every frame.
+        // The three opacity curves are an exact linear partition (they
+        // sum to 1 at every sampled point) so total brightness never
+        // dips or spikes as one shape fades into the next.
+        const reshapeOn = warpReshapeVal > 0;
+        const reshapeDur = Math.max(2.5, 22 / Math.max(0.1, warpReshapeVal));
+        const reshapeKeyTimes = '0;0.16667;0.33333;0.5;0.66667;0.83333;1';
+        const reshapeLayerValues = [
+          '1;0.5;0;0;0;0.5;1',
+          '0;0.5;1;0.5;0;0;0',
+          '0;0;0;0.5;1;0.5;0',
+        ];
+        const baseLayers = reshapeOn
+          ? [
+              { filterId: warpFilterId, maskId: warpMaskId, seed: warpSeed, opacityValues: reshapeLayerValues[0] },
+              { filterId: warpFilterId2, maskId: warpMaskId2, seed: warpSeed + 211, opacityValues: reshapeLayerValues[1] },
+              { filterId: warpFilterId3, maskId: warpMaskId3, seed: warpSeed + 457, opacityValues: reshapeLayerValues[2] },
+            ]
+          : [{ filterId: warpFilterId, maskId: warpMaskId, seed: warpSeed, opacityValues: null }];
+        const rimGlowFilter = [
+          `drop-shadow(0 0 ${1.5 + warpBorder * 0.3}px ${hexToRgba(warpPalette.accent, 0.9)})`,
+          `drop-shadow(0 0 ${4 + warpBorder * 0.8}px ${hexToRgba(warpPalette.accent, 0.6)})`,
+        ].join(' ');
+        return (
+          <g pointerEvents="none">
+            <defs>
+              <clipPath id={warpClipId}>
+                <polygon points={hexPoints(x, y, hexSize * 0.97)} />
+              </clipPath>
+
+              {/* Base swirl — fractal turbulence generated once per
+                  layer (fixed baseFrequency, no per-frame reshaping)
+                  and converted to an alpha mask (luminance-to-alpha),
+                  punched up with a steep contrast curve so it reads as
+                  defined, drifting currents rather than an even fog.
+                  Rotation comes from the animateTransform on the masked
+                  rects below; with Reshape Rate on, there are three of
+                  these (differently seeded) crossfading into each other
+                  instead of just one. */}
+              {baseLayers.map((layer) => (
+                <React.Fragment key={layer.filterId}>
+                  <filter id={layer.filterId} x="-30%" y="-30%" width="160%" height="160%">
+                    <feTurbulence type="fractalNoise" baseFrequency={`${baseFreq} ${baseFreq}`} numOctaves="3" seed={layer.seed} stitchTiles="stitch" result="noise" />
+                    <feColorMatrix in="noise" type="luminanceToAlpha" result="alpha" />
+                    <feComponentTransfer in="alpha" result="contrast">
+                      <feFuncA type="linear" slope="2.6" intercept="-0.55" />
+                    </feComponentTransfer>
+                  </filter>
+                  <mask id={layer.maskId} maskUnits="userSpaceOnUse" style={{ maskType: 'alpha' }}>
+                    <rect x={x - half} y={y - half} width={half * 2} height={half * 2} fill="white" filter={`url(#${layer.filterId})`} />
+                  </mask>
+                </React.Fragment>
+              ))}
+
+              {/* Bright "veins" — a second, finer turbulence pass
+                  (also generated once, not reshaped per-frame)
+                  thresholded much harder so only its brightest peaks
+                  survive, screened on top in the palette's accent tone
+                  for that crackling-energy read. Rotates independently
+                  of the base layer below, at its own speed and in the
+                  opposite direction, for a bit of layered depth. */}
+              <filter id={warpVeinFilterId} x="-30%" y="-30%" width="160%" height="160%">
+                <feTurbulence type="fractalNoise" baseFrequency={`${veinFreq} ${veinFreq}`} numOctaves="2" seed={warpSeed + 97} stitchTiles="stitch" result="noise" />
+                <feColorMatrix in="noise" type="luminanceToAlpha" result="alpha" />
+                <feComponentTransfer in="alpha" result="veins">
+                  <feFuncA type="linear" slope="6" intercept="-4.4" />
+                </feComponentTransfer>
+              </filter>
+              <mask id={warpVeinMaskId} maskUnits="userSpaceOnUse" style={{ maskType: 'alpha' }}>
+                <rect x={x - half} y={y - half} width={half * 2} height={half * 2} fill="white" filter={`url(#${warpVeinFilterId})`} />
+              </mask>
+
+              <radialGradient id={warpGradId} cx={x} cy={y} r={half} gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stopColor={warpPalette.stops[2]} />
+                <stop offset="55%" stopColor={warpPalette.stops[1]} />
+                <stop offset="100%" stopColor={warpPalette.stops[0]} />
+              </radialGradient>
+            </defs>
+
+            <g clipPath={`url(#${warpClipId})`}>
+              {/* Dark void base — so the mask's low-alpha gaps read as
+                  churning shadow rather than the tile's own territory
+                  colour showing through. */}
+              <polygon points={hexPoints(x, y, hexSize)} fill={warpPalette.stops[0]} />
+
+              {/* Hover parallax lives on this wrapping <g> (a plain,
+                  CSS-transitioned translate); the rotation lives on the
+                  <rect> itself via its own animateTransform — two
+                  independent transforms that compose naturally instead
+                  of fighting over one `transform` attribute. */}
+              <g transform={`translate(${hoverDx} ${hoverDy})`} style={{ transition: 'transform 0.25s ease-out' }}>
+                <g>
+                  <animateTransform attributeName="transform" type="rotate" from={`0 ${x} ${y}`} to={`360 ${x} ${y}`} dur={`${dur}s`} repeatCount="indefinite" />
+                  {baseLayers.map((layer) => (
+                    <rect
+                      key={layer.maskId}
+                      x={x - half}
+                      y={y - half}
+                      width={half * 2}
+                      height={half * 2}
+                      fill={`url(#${warpGradId})`}
+                      mask={`url(#${layer.maskId})`}
+                    >
+                      {layer.opacityValues && (
+                        <animate attributeName="opacity" values={layer.opacityValues} keyTimes={reshapeKeyTimes} dur={`${reshapeDur}s`} repeatCount="indefinite" />
+                      )}
+                    </rect>
+                  ))}
+                </g>
+              </g>
+              <g transform={`translate(${hoverDx * 1.6} ${hoverDy * 1.6})`} style={{ transition: 'transform 0.25s ease-out' }}>
+                <rect
+                  x={x - half}
+                  y={y - half}
+                  width={half * 2}
+                  height={half * 2}
+                  fill={warpPalette.vein}
+                  mask={`url(#${warpVeinMaskId})`}
+                  opacity={0.85}
+                  style={{ mixBlendMode: 'screen' }}
+                >
+                  <animateTransform attributeName="transform" type="rotate" from={`360 ${x} ${y}`} to={`0 ${x} ${y}`} dur={`${veinDur}s`} repeatCount="indefinite" />
+                </rect>
+              </g>
+            </g>
+
+            {/* Containment ring — the tile's own edge glowing in the
+                palette's accent colour, thickness GM-tunable. */}
+            {warpBorder > 0 && (
+              <polygon
+                points={hexPoints(x, y, hexSize * 0.97)}
+                fill="none"
+                stroke={warpPalette.accent}
+                strokeWidth={Math.max(0.5, (warpBorder / 12) * hexSize * 0.16)}
+                style={{ filter: rimGlowFilter }}
+              />
+            )}
+
+            {/* Invisible hit-layer — tracks hover for the parallax
+                shift above and forwards clicks to the same hex-select
+                handler the tile's own base polygon uses, so having
+                Warp Rift active doesn't change how selecting the hex
+                works. pointerEvents is "all" only on this element;
+                every other piece of this effect stays "none" so
+                nothing else competes for the click/hover. */}
+            <polygon
+              points={points}
+              fill="transparent"
+              pointerEvents="all"
+              style={{ cursor: 'pointer' }}
+              onClick={handleClick}
+              onMouseMove={(e) => {
+                const svg = e.currentTarget.ownerSVGElement;
+                const rect = svg.getBoundingClientRect();
+                const scaleX = svg.viewBox.baseVal.width / rect.width;
+                const scaleY = svg.viewBox.baseVal.height / rect.height;
+                const svgX = (e.clientX - rect.left) * scaleX;
+                const svgY = (e.clientY - rect.top) * scaleY;
+                setWarpHover({ dx: svgX - x, dy: svgY - y });
+              }}
+              onMouseLeave={() => setWarpHover(null)}
+            />
           </g>
         );
       })()}

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useMapState, useMapActions } from '../../state/MapContext.jsx';
+import { WARP_PALETTES } from '../../state/mapReducer.js';
 
 const numberInputStyle = {
   width: 46,
@@ -335,6 +336,53 @@ export default function DisplaySettingsPanel() {
                 style={{ width: 36, height: 28, border: '1px solid var(--steel-line)', background: 'none', padding: 0, cursor: 'pointer', borderRadius: 3 }}
               />
             )
+          )}
+
+          {section(
+            'warp',
+            'Warp Rift',
+            <>
+              {row(
+                'Warp Alignment',
+                <select
+                  value={state.warpPalette}
+                  onChange={(e) => actions.setWarpPalette(e.target.value)}
+                  style={{ width: '100%' }}
+                >
+                  {WARP_PALETTES.map((p) => (
+                    <option key={p.id} value={p.id}>{p.label}</option>
+                  ))}
+                </select>
+              )}
+              {sliderRow('Distortion Intensity', {
+                value: state.warpChaos,
+                min: 1,
+                max: 15,
+                step: 0.5,
+                onChange: actions.setWarpChaos,
+              })}
+              {sliderRow('Flow Speed', {
+                value: state.warpSpeed,
+                min: 0,
+                max: 15,
+                step: 0.5,
+                onChange: actions.setWarpSpeed,
+              })}
+              {sliderRow('Border Glow Thickness', {
+                value: state.warpBorder,
+                min: 0,
+                max: 12,
+                step: 1,
+                onChange: actions.setWarpBorder,
+              })}
+              {sliderRow('Reshape Rate', {
+                value: state.warpReshape,
+                min: 0,
+                max: 10,
+                step: 0.5,
+                onChange: actions.setWarpReshape,
+              })}
+            </>
           )}
         </div>
 
